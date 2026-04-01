@@ -79,7 +79,7 @@ Key behaviors:
 - Infers intent before judging — avoids "why didn't you just use X" style feedback
 - No finding count limit — every issue is reported
 - `auto_fixable: true` = deterministic fix, no design judgment needed
-- `requires_confirmation` = design decision required from the author
+- `requires_confirmation` = design decision required from the author (exception: robustness-only tradeoffs with no behavior change are auto-resolved by the fixer)
 
 ### `rfl` — Review-Fix Loop
 
@@ -108,9 +108,10 @@ cp skills/ifr/SKILL.md ~/.claude/skills/ifr/SKILL.md
 mkdir -p ~/.claude/skills/rfl
 cp skills/rfl/SKILL.md ~/.claude/skills/rfl/SKILL.md
 
-# Parallel review merge script (required for --d and --parallel modes)
+# Scripts (required for all modes)
 mkdir -p ~/.claude/scripts
 cp scripts/merge_parallel_reviews.py ~/.claude/scripts/merge_parallel_reviews.py
+cp scripts/review-feedback.py ~/.claude/scripts/review-feedback.py
 ```
 
 Usage in Claude Code:
