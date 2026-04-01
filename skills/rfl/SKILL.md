@@ -1,6 +1,6 @@
 ---
 description: intent-first-reviewでレビュー→自動修正→再レビューのループ。レビューはサブエージェントで実行し、自己レビューバイアスを構造的に排除する。
-allowed-tools: Read, Glob, Grep, Edit, Write, Bash(git *), Bash(python*), Bash(node*), Bash(claude*), Bash(*codex*), Bash(*ANTHROPIC_*), Bash(rm *), Bash(cat *), Bash(mktemp*), Bash(command *), Bash(cmd *), Bash(wc *), Bash(ls *), Agent
+allowed-tools: Read, Glob, Grep, Edit, Write, Bash(git *), Bash(python*), Bash(node*), Bash(claude*), Bash(*codex*), Bash(*ANTHROPIC_*), Bash(cat *), Bash(mktemp*), Bash(command *), Bash(cmd *), Bash(wc *), Bash(ls *), Agent
 ---
 
 # /review-fix-loop - 高精度レビュー&自動修正ループ
@@ -349,7 +349,7 @@ cat "$PROMPT_FILE" | "${CODEX_PATH:-codex}" exec \
   --dangerously-bypass-approvals-and-sandbox 2>"$SESSION_TMPDIR"/codex-fix-stderr.log
 CODEX_FIX_EXIT=$?
 [ $CODEX_FIX_EXIT -ne 0 ] && cat "$SESSION_TMPDIR"/codex-fix-stderr.log >&2
-rm -f "$PROMPT_FILE"
+python -c "import pathlib, sys; pathlib.Path(sys.argv[1]).unlink(missing_ok=True)" "$PROMPT_FILE"
 ```
 
 **Codex修正後の確認:**
@@ -451,10 +451,19 @@ python -c "import pathlib; pathlib.Path.home().joinpath('.claude/review-loop-sta
 ```
 
 **git管理下の場合（`base_rev` が null でない）:**
-ステージング・commit・push・PR 作成は `/commit` に委譲する。
-ユーザーへの確認なしに、Claude 自身が続けて `/commit` を実行する。
 
-**git管理外の場合（`base_rev` が null。`.claude/commands/*.md`・`.claude/skills/*.md` 等）:**
+```bash
+# 変更ファイルをステージング（last_modified_files + 初回レビュー対象ファイル）
+git add <対象ファイル一覧>
+
+# コミット（Conventional Commits 形式）
+git commit -m "fix: auto-fix review findings (rfl loop N)"
+
+# リモートが存在する場合のみプッシュ
+git remote -v && git push
+```
+
+**git管理外の場合（`base_rev` が null。`.claude/skills/*.md` 等）:**
 commit & push なし。
 
 Review Feedback記録・セッション終了（排他的分岐）:
