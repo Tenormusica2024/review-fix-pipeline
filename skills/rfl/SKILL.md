@@ -145,7 +145,7 @@ python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" inject --review
 
 8. ループ開始通知:
 ```
-⚠️ レビューループを開始します（最大5回）。
+レビューループを開始します（最大5回）。
 対象ファイルをループ完了まで手動編集しないでください。
 ループ中のファイル変更は再レビュー時の差分検出に影響します。
 ```

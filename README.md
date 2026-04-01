@@ -1,6 +1,6 @@
 # review-fix-pipeline
 
-> AI agents suffer from the same self-review bias as humans — they unconsciously avoid re-detecting their own mistakes. This pipeline structurally eliminates that bias.
+> AI agents suffer from the same self-review bias as humans — they unconsciously avoid re-detecting their own mistakes. This pipeline reduces that bias structurally, by separating reviewer and fixer into independent contexts.
 
 Claude Code skills for **intent-first code review** and **automated fix loops** with independent sub-agent contexts.
 
@@ -101,12 +101,15 @@ git clone https://github.com/Tenormusica2024/review-fix-pipeline
 cd review-fix-pipeline
 
 # Intent-First Review (/ifr)
+mkdir -p ~/.claude/skills/ifr
 cp skills/ifr/SKILL.md ~/.claude/skills/ifr/SKILL.md
 
 # Review-Fix Loop (/rfl)
-cp skills/rfl/SKILL.md ~/.claude/commands/rfl.md
+mkdir -p ~/.claude/skills/rfl
+cp skills/rfl/SKILL.md ~/.claude/skills/rfl/SKILL.md
 
 # Parallel review merge script (required for --d and --parallel modes)
+mkdir -p ~/.claude/scripts
 cp scripts/merge_parallel_reviews.py ~/.claude/scripts/merge_parallel_reviews.py
 ```
 
@@ -115,8 +118,10 @@ Usage in Claude Code:
 ```
 /ifr                 # review current changes (intent-first)
 /ifr --d             # dual review: Opus 4.6 + Codex gpt-5.4
+/ifr --parallel      # 3-model consensus: Opus + Codex + GLM (requires ZAI_AUTH_TOKEN)
 /rfl                 # review-fix loop (up to 5 iterations)
 /rfl --d             # dual review mode per loop
+/rfl --parallel      # 3-model consensus per loop
 ```
 
 ---
