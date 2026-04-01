@@ -96,6 +96,8 @@ Key behaviors:
 
 ## Setup
 
+> **Prerequisite:** The setup commands and `rfl` shell examples require **Git Bash** (Windows) or a POSIX shell (macOS/Linux). PowerShell is not supported.
+
 ```bash
 git clone https://github.com/Tenormusica2024/review-fix-pipeline
 cd review-fix-pipeline
@@ -117,7 +119,7 @@ cp scripts/review-feedback.py ~/.claude/scripts/review-feedback.py
 Usage in Claude Code:
 
 ```
-/ifr                 # review current changes (intent-first)
+/ifr                 # review + auto-fix current changes (intent-first)
 /ifr --d             # dual review: Opus 4.6 + Codex gpt-5.4
 /ifr --parallel      # 3-model consensus: Opus + Codex + GLM (requires ZAI_AUTH_TOKEN)
 /rfl                 # review-fix loop (up to 5 iterations)

@@ -17,7 +17,6 @@ Usage:
 
 import argparse
 import json
-import os
 import sqlite3
 import sys
 from datetime import datetime, timedelta
@@ -31,8 +30,8 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-DB_PATH = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / ".claude" / "review-feedback.db"
-SESSION_ID_PATH = Path(os.environ.get("USERPROFILE", os.path.expanduser("~"))) / ".session-id"
+DB_PATH = Path.home() / ".claude" / "review-feedback.db"
+SESSION_ID_PATH = Path.home() / ".session-id"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS findings (
@@ -113,7 +112,10 @@ def get_session_id() -> Optional[str]:
 
 
 def get_project_name() -> Optional[str]:
-    """カレントディレクトリ名からプロジェクト名を推定。"""
+    """プロジェクト名を推定。git リポジトリルートのディレクトリ名を優先し、なければ cwd 名を返す。"""
+    root = get_repo_root()
+    if root:
+        return Path(root).name
     try:
         return Path.cwd().name
     except Exception:
@@ -149,7 +151,7 @@ def cmd_record(args):
         sys.exit(1)
 
     if not findings:
-        print("Warning: findingsが空です。記録するfindingがありません", file=sys.stderr)
+        print(f"Warning: findingsが空です（reviewer={args.reviewer}）。記録するfindingがありません", file=sys.stderr)
 
     session_id = args.session_id or get_session_id()
     project = args.project or get_project_name()
@@ -185,17 +187,20 @@ def cmd_record(args):
             )
             inserted_ids.append(cursor.lastrowid)
 
-        # openセッションをclosedに更新（最新のopenセッション1件）
+        # openセッションをclosedに更新
+        # session_id がある場合は同一セッションのみを対象にする（並行実行・複数リポジトリでの誤閉じを防止）
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        session_clause = "AND session_id=?" if session_id else ""
+        session_param = [session_id] if session_id else []
         updated = conn.execute(
-            """UPDATE review_sessions
+            f"""UPDATE review_sessions
                SET status='closed', closed_at=?, findings_count=?, close_reason='recorded'
                WHERE id = (
                    SELECT id FROM review_sessions
-                   WHERE reviewer=? AND status='open'
+                   WHERE reviewer=? AND status='open' {session_clause}
                    ORDER BY started_at DESC LIMIT 1
                )""",
-            (now, len(inserted_ids), args.reviewer),
+            [now, len(inserted_ids), args.reviewer] + session_param,
         ).rowcount
         if updated == 0:
             print("Warning: 対応するopenセッションが見つかりません（後方互換で記録は継続）", file=sys.stderr)
@@ -493,19 +498,23 @@ def cmd_check_open_sessions(args):
 # --- close-session ---
 def cmd_close_session(args):
     """findings 0件でセッションを閉じる（問題なし / 中断時）。"""
+    session_id = getattr(args, "session_id", None) or get_session_id()
     conn = get_connection()
     try:
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         reason = args.reason or "manual-close"
+        # session_id がある場合は同一セッションのみを対象にする（並行実行・複数リポジトリでの誤閉じを防止）
+        session_clause = "AND session_id=?" if session_id else ""
+        session_param = [session_id] if session_id else []
         updated = conn.execute(
-            """UPDATE review_sessions
+            f"""UPDATE review_sessions
                SET status='closed', closed_at=?, findings_count=0, close_reason=?
                WHERE id = (
                    SELECT id FROM review_sessions
-                   WHERE reviewer=? AND status='open'
+                   WHERE reviewer=? AND status='open' {session_clause}
                    ORDER BY started_at DESC LIMIT 1
                )""",
-            (now, reason, args.reviewer),
+            [now, reason, args.reviewer] + session_param,
         ).rowcount
         conn.commit()
     finally:
@@ -696,6 +705,7 @@ def main():
     p_close = subparsers.add_parser("close-session", help="findings 0件でセッションを閉じる")
     p_close.add_argument("--reviewer", required=True, help="レビュアー名")
     p_close.add_argument("--reason", help="クローズ理由（例: no-findings, cancelled）")
+    p_close.add_argument("--session-id", help="セッションID（省略時は~/.session-idから取得）")
     p_close.set_defaults(func=cmd_close_session)
 
     # dismiss（ユーザー承認フロー）
