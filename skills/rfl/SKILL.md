@@ -112,7 +112,7 @@ if [ "$MODE" = "d" ] || [ "$MODE" = "c" ]; then
   fi
 fi
 ```
-GLM/Codex のいずれかが利用不可の場合、利用可能なモデルのみで並列実行する（ifr.md 部分失敗時フォールバックと同一）。`--parallel` 時: 全モデル利用不可 → Opus 単体にフォールバック。`--d` / `--c` 時: Codex利用不可 → Opus Agent単体レビュー + メインコンテキスト修正にフォールバック（ループ自体は中断しない）。
+GLM/Codex のいずれかが利用不可の場合、利用可能なモデルのみで並列実行する（`skills/ifr/SKILL.md` の部分失敗時フォールバックと同一）。`--parallel` 時: 全モデル利用不可 → Opus 単体にフォールバック。`--d` / `--c` 時: Codex利用不可 → Opus Agent単体レビュー + メインコンテキスト修正にフォールバック（ループ自体は中断しない）。
 
 **前提環境**: 並列実行手順のシェルコマンドはすべて **Git Bash（MSYS2）前提**。`mktemp` `/tmp` `cat` `rm` 等のPOSIXコマンドを直接使用する（PowerShell互換は考慮しない）。
 
@@ -163,7 +163,7 @@ python "$HOME/.claude/scripts/review-feedback.py" inject --reviewer "review-fix-
 #### 並列レビューモード（`--parallel` 引数指定時）
 
 `--parallel` が指定された場合、**`/ifr` の並列レビューモードに委譲する**。
-並列実行方法・結果マージルール・注意事項はすべて `/ifr`（`ifr.md`）の「並列レビューモード」セクションに定義されている。
+並列実行方法・結果マージルール・注意事項はすべて `/ifr`（`skills/ifr/SKILL.md`）の「並列レビューモード」セクションに定義されている。
 
 - `/rfl --parallel` → 各ループのStep 1で `/ifr --parallel` 相当の3モデル並列レビューを実行
 - `--parallel` なし・`--d` なし・`--c` なし → 従来通りAgentツール（Opus）のみで実行
@@ -188,17 +188,17 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 
 3. マージ結果（Markdown）をStep 2の入力として使用する
 
-**スクリプト失敗時のフォールバック:** エラーの場合、メインコンテキストが3モデル出力を手動でマージする（ifr.mdのフォールバックルールに準拠）。
+**スクリプト失敗時のフォールバック:** エラーの場合、メインコンテキストが3モデル出力を手動でマージする（`skills/ifr/SKILL.md` のフォールバックルールに準拠）。
 
 #### Dual レビューモード（`--d` 引数指定時）
 
 `--d` が指定された場合、**`/ifr` の Dual レビューモードに委譲する**。
 Opus 4.6（Agentツール）+ Codex gpt-5.4（codex exec）の**2モデルペアレビュー**を実行する。
-実行方法・結果マージルール・注意事項はすべて `/ifr`（`ifr.md`）の「Dual レビューモード」セクションに定義されている。
+実行方法・結果マージルール・注意事項はすべて `/ifr`（`skills/ifr/SKILL.md`）の「Dual レビューモード」セクションに定義されている。
 
 - `/rfl --d` → 各ループのStep 1で `/ifr --d` 相当の2モデルペアレビューを実行
 - `--d` と `--c` は排他。`--d` と `--parallel` も排他。両方指定時は `--d` を優先
-- **`IFR_MODE=review-only` を環境変数として渡す**（ifr.md の SESSION_TMPDIR クリーンアップスキップ条件。rfl Step 3以降で tmpdir を使用するため）
+- **`IFR_MODE=review-only` を環境変数として渡す**（`skills/ifr/SKILL.md` の SESSION_TMPDIR クリーンアップスキップ条件。rfl Step 3以降で tmpdir を使用するため）
 
 **`--d` 時の結果マージ手順:**
 
@@ -268,7 +268,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 あなたはintent-first-reviewのレビュアーです。以下のルールに従ってレビューしてください。
 
 ## レビュールール
-[intent-first-review ifr.mdの内容をここに展開]
+[intent-first-review（`skills/ifr/SKILL.md`）の内容をここに展開]
 
 ## プロジェクトコンテキスト
 - プロジェクト概要: [Step 0で収集した情報]
@@ -285,7 +285,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 1. 全ファイルを丁寧に読み、問題箇所をすべて報告してください（※初回レビュー用。ループ2回目以降はStep 4の追加コンテキストで変更差分のみに限定される）
 2. 件数制限なし。見つけた問題はすべて出してください
 3. 各指摘に severity（critical / warning / info）を付与してください
-4. 出力はifr.md Step 4のフォーマット（Markdown）で返してください（以下は必須項目の要約。正式フォーマットはifr.md Step 4を参照）:
+4. 出力は `skills/ifr/SKILL.md` Step 4のフォーマット（Markdown）で返してください（以下は必須項目の要約。正式フォーマットは `skills/ifr/SKILL.md` Step 4を参照）:
    - 「自動修正可」「要確認」に分類
    - 各指摘に severity・auto_fixable・ファイルパス:行番号・修正内容を含める
 ```
@@ -323,7 +323,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 
 #### 堅牢方向の自動選択ルール・自律修正原則
 
-**詳細は `/ifr`（`ifr.md`）Step 4 出力フォーマットの blockquote を参照**（SSoT）。
+**詳細は `/ifr`（`skills/ifr/SKILL.md`）Step 4 出力フォーマットの blockquote を参照**（SSoT）。
 概要: 堅牢な方を自動選択、再検出可能性の高い問題は `auto_fixable: true` として自動修正。
 
 提示フォーマット:
@@ -602,11 +602,11 @@ commitは行っていません（/go-robust が処理可能な修正を実行後
 
 - **レビューは必ずサブエージェントで実行する**: 同一コンテキストでの自己レビューは禁止。これがiterative-fixとの最大の差別化ポイント
 - **毎ループで新しいサブエージェントを起動する**: 前回のコンテキストを引き継がないことで忖度を構造的に排除
-- **サブエージェントにはプロジェクトコンテキストを十分に渡す**: ifr.md（レビュールール）だけでなく、設計意図・CLAUDE.md・プロジェクト概要を含める。ここが雑だと「一般論」ベースのレビューになる
+- **サブエージェントにはプロジェクトコンテキストを十分に渡す**: `skills/ifr/SKILL.md`（レビュールール）だけでなく、設計意図・CLAUDE.md・プロジェクト概要を含める。ここが雑だと「一般論」ベースのレビューになる
 - **Critical指摘は必ず実測確認してから修正する**: サブエージェントの主張をBash/python -cで検証し、誤検知なら修正しない
 - **誤検知率 > 50% は早期終了**: 本物の問題が底をついたサインであり、追加ループは精度を下げるだけになる
 - **ループ状態ファイルで中断耐性を確保**: compact 後の resume でもループ番号・対象ファイルを復元して継続できる
-- **要確認は蓄積してループ完了後に一括提示**: ループをブロックしない。ただし severity: critical かつ auto_fixable: false の場合のみ即中断してユーザーに確認する。堅牢方向の自動選択ルール・自律修正原則に該当する場合は自動修正してよい（詳細は ifr.md 参照）
+- **要確認は蓄積してループ完了後に一括提示**: ループをブロックしない。ただし severity: critical かつ auto_fixable: false の場合のみ即中断してユーザーに確認する。堅牢方向の自動選択ルール・自律修正原則に該当する場合は自動修正してよい（詳細は `skills/ifr/SKILL.md` 参照）
 - **Info以下はループ対象外**: Warning以上のみをループ判定に使用
 - **commitは最後の1回だけ**: 途中ループでのcommitは禁止（差分が追えなくなるため）
 - **メインコンテキストは修正の妥当性を判断する権限を持つ**: サブエージェントの指摘が誤検知の場合、修正せずにスキップしてよい（理由をユーザーに報告する）。`--d` / `--c` 時はCodexが修正を実行するが、メインコンテキストが差分を確認し、明らかに誤った修正はrevertする
@@ -614,8 +614,3 @@ commitは行っていません（/go-robust が処理可能な修正を実行後
 - **`--d` / `--c` 時のCodex修正フォールバック**: Codex修正失敗（exit code != 0 or 無変更）時はメインコンテキストが通常モードで修正する
 - **`--d` / `--c` / `--parallel` は排他**: 優先順位は `--d` > `--c` > `--parallel`。複数指定時は上位モードを採用する
 - **/commit自動実行は現状維持**: Step 5完了時にユーザー確認なしで `/commit` を自動実行する。git管理下プロジェクトではループ完了→commit→pushまでを一気通貫で行う設計方針（2026-03-30決定）
-- **rfl.md は review-fix-loop.md のコピー**: Edit/Write ツールがハードリンク/シンボリックリンクを破壊するため、コピースクリプトで自動同期する。review-fix-loop.md を編集した後は必ず以下を実行:
-  ```bash
-  python "$HOME/.claude/scripts/sync-rfl.py"
-  ```
-  スクリプトは review-fix-loop.md → rfl.md への内容コピーと整合性検証を自動実行する

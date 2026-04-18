@@ -178,9 +178,15 @@ def main() -> int:
         save_state(session_id, state)
         return 0
 
-    # 安全弁: 同一サイクルで MAX_ENFORCE 回ブロック済みなら諦める
+    # 安全弁: 同一サイクルで MAX_ENFORCE 回ブロック済みなら諦める。
+    # 無限ループ防止のため pass するが、サイレントに諦めると気づきにくいので
+    # stderr に警告を出して運用者が検知できるようにする。
     enforced_count = state.get("enforced_count", 0)
     if enforced_count >= MAX_ENFORCE:
+        sys.stderr.write(
+            f"[enforce-go-robust-stop] MAX_ENFORCE ({MAX_ENFORCE}) reached for session "
+            f"{session_id!r}; giving up enforcement for this cycle\n"
+        )
         return 0
 
     # 要確認マーカー検出

@@ -540,8 +540,9 @@ def cmd_dismiss(args):
     """finding を dismissed にする（ユーザー承認フロー）。
 
     dismissed は人間のみが承認できる。Claude の自己判断での dismissed 処理は禁止。
-    このコマンドは dismissed_by='user' のみを設定するため、
-    Claude が直接実行しても 'user' にはなれず安全性が保証される。
+    TTY (対話セッション) からの実行のみ dismissed_by='user' を設定し、
+    パイプ/リダイレクト/スクリプト経由の非対話実行は dismissed_by='agent' として記録する。
+    これにより Claude から呼び出された場合に 'user' 扱いされないことを保証する。
     """
     ids_str = args.ids
     fp_reason = args.fp_reason
@@ -601,15 +602,18 @@ def cmd_dismiss(args):
                 print("キャンセルされました")
                 sys.exit(0)
 
+        # 対話セッション（TTY）からの実行のみ 'user' として記録。
+        # パイプ・スクリプト経由（Claude 等のエージェントから呼ばれた場合）は 'agent' とする。
+        dismissed_by = "user" if interactive else "agent"
         updated = conn.execute(
             f"""UPDATE findings
                SET dismissed = 1,
-                   dismissed_by = 'user',
+                   dismissed_by = ?,
                    dismissed_at = ?,
                    fp_reason = ?
                WHERE id IN ({placeholders})
                  AND dismissed = 0""",
-            (now, fp_reason or None, *ids),
+            (dismissed_by, now, fp_reason or None, *ids),
         ).rowcount
         conn.commit()
     finally:
@@ -628,7 +632,7 @@ def cmd_dismiss(args):
         "dismissed": updated,
         "ids": ids,
         "fp_reason": fp_reason or None,
-        "dismissed_by": "user",
+        "dismissed_by": dismissed_by,
         "dismissed_at": now,
     }))
 
@@ -720,7 +724,7 @@ def main():
     # dismiss（ユーザー承認フロー）
     p_dismiss = subparsers.add_parser(
         "dismiss",
-        help="finding を dismissed にする（ユーザー承認フロー・dismissed_by=user のみ）",
+        help="finding を dismissed にする（TTY 対話時のみ dismissed_by=user、非対話時は dismissed_by=agent）",
     )
     p_dismiss.add_argument("--ids", required=True, help="カンマ区切りの finding ID")
     p_dismiss.add_argument("--fp-reason", help="false positive の理由（省略可）")
