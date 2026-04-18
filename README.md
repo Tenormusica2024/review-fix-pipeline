@@ -176,7 +176,7 @@ A rising false positive rate is the signal that the model has run out of real is
 ## Requirements
 
 - [Claude Code](https://claude.ai/code)
-- Python 3.8+
+- Python 3.10+
 - Codex CLI (optional, for `--d` mode): `npm install -g @openai/codex`
 
 ## License
