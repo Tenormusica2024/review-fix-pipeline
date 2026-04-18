@@ -27,8 +27,8 @@ Separate review and fix into **independent contexts**. Each reviewer is a fresh 
                     └────────────────┬────────────────┘
                                      │
                          ┌───────────▼───────────┐
-                         │ auto_fixable findings │
-                         │ requires_confirmation │
+                         │ ## Auto-fixable       │
+                         │ ## Requires confirm.  │
                          └───────────┬───────────┘
                                      │
                     ┌────────────────▼────────────────┐
@@ -138,21 +138,35 @@ cp skills/ifr/SKILL.md ~/.claude/skills/ifr/SKILL.md
 mkdir -p ~/.claude/skills/rfl
 cp skills/rfl/SKILL.md ~/.claude/skills/rfl/SKILL.md
 
+# Requires-Confirmation Processor (/go-robust)
+mkdir -p ~/.claude/skills/go-robust
+cp skills/go-robust/SKILL.md ~/.claude/skills/go-robust/SKILL.md
+
 # Scripts (required for all modes)
 mkdir -p ~/.claude/scripts
 cp scripts/merge_parallel_reviews.py ~/.claude/scripts/merge_parallel_reviews.py
 cp scripts/review-feedback.py ~/.claude/scripts/review-feedback.py
+
+# Enforcement hooks (optional — see "Enforcement Hooks" section above)
+mkdir -p ~/.claude/hooks
+cp hooks/enforce-go-robust-submit.py ~/.claude/hooks/enforce-go-robust-submit.py
+cp hooks/enforce-go-robust-stop.py ~/.claude/hooks/enforce-go-robust-stop.py
 ```
+
+After copying the hook scripts, register them in `~/.claude/settings.json` under `hooks.UserPromptSubmit` and `hooks.Stop` so Claude Code invokes them. See the Claude Code hooks documentation for the exact schema.
 
 Usage in Claude Code:
 
 ```
 /ifr                 # review + auto-fix current changes (intent-first)
 /ifr --d             # dual review: Opus 4.6 + Codex gpt-5.4
+/ifr --c             # dual Codex review: 2 instances with split angles (quality vs security)
 /ifr --parallel      # 3-model consensus: Opus + Codex + GLM (requires ZAI_AUTH_TOKEN)
 /rfl                 # review-fix loop (up to 5 iterations)
 /rfl --d             # dual review mode per loop
+/rfl --c             # dual Codex review mode per loop
 /rfl --parallel      # 3-model consensus per loop
+/go-robust           # process accumulated requires_confirmation items using the 5 principles
 ```
 
 ---

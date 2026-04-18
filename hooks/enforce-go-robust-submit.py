@@ -37,22 +37,19 @@ if sys.stderr is None:
 
 STATE_DIR = Path.home() / ".claude" / "state" / "go-robust-enforce"
 
-# レビューコマンド検出（行頭マッチ、大小無視）
-# /ifr, /rfl, /brutal-review および正式名 /intent-first-review, /review-fix-loop
-REVIEW_CMD_PATTERN = re.compile(
-    r"^\s*/(ifr|rfl|brutal-review|intent-first-review|review-fix-loop)\b",
-    re.IGNORECASE | re.MULTILINE,
+# session_id に使える文字（ファイル名として安全な集合のみ許可）。
+# 許可外の文字が入っていればパストラバーサル回避のため state 処理を拒否する。
+SAFE_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# 先頭スラッシュコマンドの検出（プロンプト全体の最初の非空行のみを対象にする）。
+# MULTILINE 検索だと本文中の引用・例示にも反応して state 遷移が誤発火するため、
+# 「この応答でユーザーが実際にコマンドを発行した」ことを示す先頭行に限定する。
+FIRST_LINE_CMD_PATTERN = re.compile(
+    r"^\s*/(ifr|rfl|brutal-review|intent-first-review|review-fix-loop|go-robust|skip-go-robust-once)\b(.*)$",
+    re.IGNORECASE,
 )
 
-# /go-robust 実行検出
-GO_ROBUST_PATTERN = re.compile(r"^\s*/go-robust\b", re.IGNORECASE | re.MULTILINE)
-
-# 脱出口: one-shot バイパスコマンド
-SKIP_ONCE_PATTERN = re.compile(
-    r"^\s*/skip-go-robust-once\b", re.IGNORECASE | re.MULTILINE
-)
-
-# 脱出口: レビューコマンドに付けるフラグ
+# 脱出口: レビューコマンドに付けるフラグ（プロンプト全体に出現してよい）
 NO_ENFORCE_FLAG = re.compile(r"--no-go-robust\b", re.IGNORECASE)
 
 # コマンド名正規化（正式名 → 短縮名）
@@ -72,10 +69,32 @@ def _default_state(session_id: str) -> dict:
     }
 
 
-def load_state(session_id: str) -> dict:
+def _state_path(session_id: str) -> Path | None:
+    """session_id から state ファイルのパスを組み立てる。
+
+    session_id が安全な文字集合に収まらない場合は None を返す（パストラバーサル回避）。
+    さらに最終パスが STATE_DIR 配下に収まっていることも resolve() 後に検証する。
+    """
+    if not SAFE_SESSION_ID_PATTERN.match(session_id):
+        sys.stderr.write(
+            f"[enforce-go-robust-submit] unsafe session_id rejected: {session_id!r}\n"
+        )
+        return None
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / f"{session_id}.json"
-    if not path.exists():
+    path = (STATE_DIR / f"{session_id}.json").resolve()
+    try:
+        path.relative_to(STATE_DIR.resolve())
+    except ValueError:
+        sys.stderr.write(
+            f"[enforce-go-robust-submit] state path escaped STATE_DIR: {path}\n"
+        )
+        return None
+    return path
+
+
+def load_state(session_id: str) -> dict:
+    path = _state_path(session_id)
+    if path is None or not path.exists():
         return _default_state(session_id)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -88,11 +107,34 @@ def load_state(session_id: str) -> dict:
 
 
 def save_state(session_id: str, state: dict) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / f"{session_id}.json"
+    path = _state_path(session_id)
+    if path is None:
+        return
     path.write_text(
         json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+
+
+REVIEW_COMMANDS = frozenset(
+    {"ifr", "rfl", "brutal-review", "intent-first-review", "review-fix-loop"}
+)
+
+
+def _first_command(prompt: str) -> tuple[str, str] | None:
+    """プロンプトの最初の非空行がスラッシュコマンドなら (コマンド名, 引数部分) を返す。
+
+    本文中の引用・説明（例: "次回は /ifr を実行したい" といった自然言語）を
+    state 遷移トリガーにしないため、先頭行のみを判定対象とする。
+    引数部分は --no-go-robust フラグ検査をレビューコマンド行に限定するために返す。
+    """
+    for line in prompt.splitlines():
+        if not line.strip():
+            continue
+        m = FIRST_LINE_CMD_PATTERN.match(line)
+        if m:
+            return m.group(1).lower(), m.group(2) or ""
+        return None
+    return None
 
 
 def main() -> int:
@@ -111,24 +153,29 @@ def main() -> int:
     now = datetime.now(timezone.utc).isoformat()
     changed = False
 
-    # 脱出口: /skip-go-robust-once または --no-go-robust
-    if SKIP_ONCE_PATTERN.search(prompt) or NO_ENFORCE_FLAG.search(prompt):
+    parsed = _first_command(prompt)
+    cmd, cmd_args = (parsed if parsed is not None else (None, ""))
+
+    # 脱出口: 先頭コマンド /skip-go-robust-once、または
+    # 先頭のレビューコマンドに付いた --no-go-robust フラグ。
+    # プロンプト全文検索にすると README やコマンド例の引用で誤発火するため、
+    # レビューコマンド行の引数部分に限定する。
+    is_bypass_flag = cmd in REVIEW_COMMANDS and bool(NO_ENFORCE_FLAG.search(cmd_args))
+    if cmd == "skip-go-robust-once" or is_bypass_flag:
         state["bypass_once"] = True
         changed = True
 
     # /go-robust 実行検出（レビューサイクルのクロージング）
-    if GO_ROBUST_PATTERN.search(prompt):
+    if cmd == "go-robust":
         state["last_go_robust"] = now
         # 新しいレビューサイクルを開始するまで enforced_count はリセットしない
         # （go-robust が終わればそのサイクルは完了なので）
         changed = True
 
     # レビューコマンド実行検出
-    m = REVIEW_CMD_PATTERN.search(prompt)
-    if m:
-        cmd = m.group(1).lower()
-        cmd = CMD_NORMALIZE.get(cmd, cmd)
-        state["last_review_command"] = {"name": cmd, "ts": now}
+    if cmd in REVIEW_COMMANDS:
+        normalized = CMD_NORMALIZE.get(cmd, cmd)
+        state["last_review_command"] = {"name": normalized, "ts": now}
         # 新規サイクル開始なので enforcement カウンタをリセット
         state["enforced_count"] = 0
         changed = True

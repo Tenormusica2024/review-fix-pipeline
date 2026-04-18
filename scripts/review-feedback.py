@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """Review Feedback Learning System - SQLiteベースのレビュー指摘管理CLI。
 
-各レビューコマンド(brutal-review, qc, pr-review等)の指摘結果を記録し、
+各レビューコマンド（/ifr, /rfl, /go-robust 等）の指摘結果を記録し、
 誤検知パターンを学習してレビュー品質を向上させる。
 
 Usage:
-    python review-feedback.py record --reviewer "brutal-review" --findings '[...]'
+    python review-feedback.py record --reviewer "intent-first-review" --findings '[...]'
     python review-feedback.py resolve --ids "1,2" --resolution "accepted"
-    python review-feedback.py query --reviewer "brutal-review" --resolution "rejected_wrong"
-    python review-feedback.py analyze --reviewer "brutal-review"
+    python review-feedback.py query --reviewer "intent-first-review" --resolution "rejected_wrong"
+    python review-feedback.py analyze --reviewer "intent-first-review"
     python review-feedback.py summary
-    python review-feedback.py inject --reviewer "brutal-review"
+    python review-feedback.py inject --reviewer "intent-first-review"
     python review-feedback.py check-open-sessions
-    python review-feedback.py close-session --reviewer "brutal-review" --reason "no-findings"
+    python review-feedback.py close-session --reviewer "intent-first-review" --reason "no-findings"
 """
 
 import argparse
@@ -432,13 +432,22 @@ def cmd_inject(args):
             (args.reviewer,),
         ).fetchall()
 
-        # 同一reviewerの既存openセッションを先にcloseする（重複防止）
+        # 同一reviewer × 同一session_idの既存openセッションだけをcloseする（重複防止）。
+        # 別セッション（別ターミナル・別リポジトリ・並行ループ）を巻き込まないため
+        # session_id を一致条件に含める。session_id が取れない場合は
+        # 既存 open session を閉じずに WARN を出して並行実行を守る。
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        conn.execute(
-            """UPDATE review_sessions SET status='closed', closed_at=?, close_reason='superseded'
-               WHERE reviewer=? AND status='open'""",
-            (now, args.reviewer),
-        )
+        if session_id:
+            conn.execute(
+                """UPDATE review_sessions SET status='closed', closed_at=?, close_reason='superseded'
+                   WHERE reviewer=? AND session_id=? AND status='open'""",
+                (now, args.reviewer, session_id),
+            )
+        else:
+            sys.stderr.write(
+                f"[review-feedback inject] session_id unavailable for reviewer={args.reviewer}; "
+                "skipping close of existing open sessions to avoid collapsing parallel runs.\n"
+            )
 
         # レビューセッションをopenで作成（構造的強制の起点）
         conn.execute(

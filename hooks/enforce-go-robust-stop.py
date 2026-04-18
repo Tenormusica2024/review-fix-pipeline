@@ -36,11 +36,21 @@ if sys.stderr is None:
 
 STATE_DIR = Path.home() / ".claude" / "state" / "go-robust-enforce"
 
+# session_id に使える文字（ファイル名として安全な集合のみ許可）。
+# submit hook (_state_path) と同一ルールに揃えることで、Stop hook 側だけ
+# 緩い文字集合を許すことによるパストラバーサルを防ぐ。
+SAFE_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
 # 同一レビューサイクル内での強制回数上限（安全弁）
 MAX_ENFORCE = 2
 
 # 要確認セクションの検出マーカー（IFR Step 4 フォーマット準拠）
-MARKER_HEADER = re.compile(r"^\s*##\s*要確認\s*$", re.MULTILINE)
+# 公開 README に英語例 (## Requires confirmation) を載せている以上、日本語と英語の両方を受理する。
+# どちらか片方だけだと README 例に従ったレビュー出力を Stop hook が検知できず /go-robust が発火しない。
+MARKER_HEADER = re.compile(
+    r"^\s*##\s*(?:要確認|Requires\s+confirmation)\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
 MARKER_SEVERITY = re.compile(
     r"^\s*severity\s*:\s*(critical|warning|info)",
     re.MULTILINE | re.IGNORECASE,
@@ -52,9 +62,32 @@ MARKER_AUTOFIX_FALSE = re.compile(
 MARKER_DIVIDER = re.compile(r"─{5,}")
 
 
+def _state_path(session_id: str) -> Path | None:
+    """session_id から state ファイルのパスを組み立てる。
+
+    submit hook 側と同じ検証ロジック: 安全な文字集合に収まらない session_id は拒否し、
+    resolve() 後に STATE_DIR 配下であることも確認してパストラバーサルを防ぐ。
+    """
+    if not SAFE_SESSION_ID_PATTERN.match(session_id):
+        sys.stderr.write(
+            f"[enforce-go-robust-stop] unsafe session_id rejected: {session_id!r}\n"
+        )
+        return None
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    path = (STATE_DIR / f"{session_id}.json").resolve()
+    try:
+        path.relative_to(STATE_DIR.resolve())
+    except ValueError:
+        sys.stderr.write(
+            f"[enforce-go-robust-stop] state path escaped STATE_DIR: {path}\n"
+        )
+        return None
+    return path
+
+
 def load_state(session_id: str) -> dict | None:
-    path = STATE_DIR / f"{session_id}.json"
-    if not path.exists():
+    path = _state_path(session_id)
+    if path is None or not path.exists():
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -66,8 +99,9 @@ def load_state(session_id: str) -> dict | None:
 
 
 def save_state(session_id: str, state: dict) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    path = STATE_DIR / f"{session_id}.json"
+    path = _state_path(session_id)
+    if path is None:
+        return
     path.write_text(
         json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
     )

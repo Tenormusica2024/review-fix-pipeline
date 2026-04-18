@@ -40,4 +40,44 @@ jobs:
 
       - name: Smoke test — hooks importable
         run: |
-          python -c "import ast; [ast.parse(open(f).read()) for f in ['hooks/enforce-go-robust-submit.py', 'hooks/enforce-go-robust-stop.py']]"
+          python -c "import ast; [ast.parse(open(f, encoding='utf-8').read()) for f in ['hooks/enforce-go-robust-submit.py', 'hooks/enforce-go-robust-stop.py']]"
+
+      - name: Validate SKILL.md files (existence + frontmatter)
+        run: |
+          python - <<'PY'
+          import sys
+          from pathlib import Path
+
+          # SKILL.md は公開配布物の中核であり、frontmatter が欠けていると Claude Code が
+          # スキルとして認識できないため、CI で存在・最低限のメタデータを検証する。
+          REQUIRED_SKILLS = ["ifr", "rfl", "go-robust"]
+          REQUIRED_KEYS = ("description:",)
+          missing = []
+          invalid = []
+
+          for name in REQUIRED_SKILLS:
+              path = Path("skills") / name / "SKILL.md"
+              if not path.exists():
+                  missing.append(str(path))
+                  continue
+              text = path.read_text(encoding="utf-8")
+              if not text.startswith("---"):
+                  invalid.append(f"{path}: missing frontmatter opening '---'")
+                  continue
+              end = text.find("\n---", 3)
+              if end == -1:
+                  invalid.append(f"{path}: missing frontmatter closing '---'")
+                  continue
+              front = text[:end]
+              for key in REQUIRED_KEYS:
+                  if key not in front:
+                      invalid.append(f"{path}: frontmatter missing '{key}'")
+
+          if missing or invalid:
+              for m in missing:
+                  print(f"MISSING: {m}", file=sys.stderr)
+              for i in invalid:
+                  print(f"INVALID: {i}", file=sys.stderr)
+              sys.exit(1)
+          print(f"OK: validated {len(REQUIRED_SKILLS)} SKILL.md files")
+          PY
