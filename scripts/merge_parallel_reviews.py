@@ -16,7 +16,6 @@ Usage:
 """
 
 import argparse
-import io
 import json
 import os
 import re
@@ -24,11 +23,12 @@ import sys
 from pathlib import Path
 from difflib import SequenceMatcher
 
-# Windows UTF-8 対応
-if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-    os.environ.setdefault("PYTHONUTF8", "1")
+# Windows 環境で cp932 stdout に日本語を出力するための UTF-8 強制
+# reconfigure: TextIOWrapper と異なり既存バッファを置換しないためより安全
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 # --- severity の順序定義 ---
@@ -57,7 +57,8 @@ def parse_file_path_line(text: str) -> tuple[str, int | None]:
         r'対象\s*[:：]\s*`?\[?([^\]`\n]+?)\]?:(\d+)`?',  # 対象: [path:line] or 対象: path:line
         r'@\s*`?\[?([^\]`\n]+?)\]?:(\d+)`?',       # @ [path:line] or @ path:line
         r'`([^`]+?):(\d+)`',                         # `path:line`
-        r'([\w/\\._-]+\.\w+):(\d+)',                 # path.ext:line（拡張子必須）
+        r'([A-Za-z]:[\w/\\._-]+\.\w+):(\d+)',           # Windows パス C:\path.ext:line
+        r'([\w/\\._-]+\.\w+):(\d+)',                   # Unix パス path.ext:line（拡張子必須）
     ]
     for pattern in patterns:
         match = re.search(pattern, text)
@@ -531,6 +532,15 @@ def main():
                 print(f"WARNING: --input の形式が不正です（NAME:FILE が必要）: {entry}", file=sys.stderr)
                 continue
             name, filepath = entry.split(":", 1)
+            # ドライブレター誤解析防止: name が単一アルファベット文字の場合は
+            # C:\path\file のような Windows パスを NAME:FILE と誤解釈している可能性がある
+            if len(name) == 1 and name.isalpha():
+                print(
+                    f"WARNING: --input '{entry}' は Windows パス（C:\\...）に見えます。"
+                    f"NAME:FILE 形式（例: opus:{entry}）で指定してください",
+                    file=sys.stderr,
+                )
+                continue
             if name in model_files:
                 print(f"WARNING: --input の名前 '{name}' が既存キーと衝突しています。"
                       f"既存: {model_files[name]} → 上書き: {filepath}", file=sys.stderr)

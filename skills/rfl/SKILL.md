@@ -63,21 +63,25 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash(git *), Bash(python*), Bash(n
    - **対象ファイル一覧**とそのファイル種別（Code/Doc）
    - **プロジェクトの目的**（git logやディレクトリ名から推定、または引数で指定）
 
-3. `--d` / `--parallel` 排他判定（MODE設定）:
+3. `--d` / `--c` / `--parallel` 排他判定（MODE設定）:
 ```bash
-# --d と --parallel は排他。両方指定時は --d を優先
+# --d と --c と --parallel は排他。複数指定時は --d > --c > --parallel を優先
 # ※ 以下は擬似コード。実際にはメインコンテキストが引数を解析して判定する
-# （単一変数で2値を同時に判定することはできないため、引数リスト全体をチェック）
-HAS_D=false; HAS_PARALLEL=false
+# （単一変数で3値を同時に判定することはできないため、引数リスト全体をチェック）
+HAS_D=false; HAS_C=false; HAS_PARALLEL=false
 for arg in "$@"; do
   [ "$arg" = "--d" ] && HAS_D=true
+  [ "$arg" = "--c" ] && HAS_C=true
   [ "$arg" = "--parallel" ] && HAS_PARALLEL=true
 done
-if [ "$HAS_D" = true ] && [ "$HAS_PARALLEL" = true ]; then
-  echo "WARNING: --d と --parallel は排他です。--d を優先します" >&2
+if [ "$HAS_D" = true ]; then
+  [ "$HAS_C" = true ] || [ "$HAS_PARALLEL" = true ] && \
+    echo "WARNING: --d / --c / --parallel は排他です。--d を優先します" >&2
   MODE="d"
-elif [ "$HAS_D" = true ]; then
-  MODE="d"
+elif [ "$HAS_C" = true ]; then
+  [ "$HAS_PARALLEL" = true ] && \
+    echo "WARNING: --c と --parallel は排他です。--c を優先します" >&2
+  MODE="c"
 elif [ "$HAS_PARALLEL" = true ]; then
   MODE="parallel"
 else
@@ -85,7 +89,7 @@ else
 fi
 ```
 
-4. `--parallel` / `--d` 時の環境変数事前チェック:
+4. `--parallel` / `--d` / `--c` 時の環境変数事前チェック:
 ```bash
 # --parallel 時: GLM（ZAI_AUTH_TOKEN）+ Codex の両方をチェック
 if [ "$MODE" = "parallel" ]; then
@@ -99,8 +103,8 @@ if [ "$MODE" = "parallel" ]; then
     echo "→ Codexなしで Opus + GLM の2モデルで実行します" >&2
   fi
 fi
-# --d 時: Codex のみチェック（GLMは使用しない）
-if [ "$MODE" = "d" ]; then
+# --d / --c 時: Codex のみチェック（GLMは使用しない。両モードで処理が同一のため統合）
+if [ "$MODE" = "d" ] || [ "$MODE" = "c" ]; then
   CODEX_CMD="${CODEX_PATH:-codex}"
   if ! command -v "$CODEX_CMD" &>/dev/null && [ ! -f "$CODEX_CMD" ]; then
     echo "ERROR: Codex CLI が見つかりません（CODEX_PATH=${CODEX_PATH:-未設定}）" >&2
@@ -108,15 +112,15 @@ if [ "$MODE" = "d" ]; then
   fi
 fi
 ```
-GLM/Codex のいずれかが利用不可の場合、利用可能なモデルのみで並列実行する（ifr.md 部分失敗時フォールバックと同一）。`--parallel` 時: 全モデル利用不可 → Opus 単体にフォールバック。`--d` 時: Codex利用不可 → Opus Agent単体レビュー + メインコンテキスト修正にフォールバック（ループ自体は中断しない）。
+GLM/Codex のいずれかが利用不可の場合、利用可能なモデルのみで並列実行する（ifr.md 部分失敗時フォールバックと同一）。`--parallel` 時: 全モデル利用不可 → Opus 単体にフォールバック。`--d` / `--c` 時: Codex利用不可 → Opus Agent単体レビュー + メインコンテキスト修正にフォールバック（ループ自体は中断しない）。
 
 **前提環境**: 並列実行手順のシェルコマンドはすべて **Git Bash（MSYS2）前提**。`mktemp` `/tmp` `cat` `rm` 等のPOSIXコマンドを直接使用する（PowerShell互換は考慮しない）。
 
 5. SESSION_TMPDIR の確定（MODE設定後に実行）:
 ```bash
-# --parallel / --d 時: セッション固有tmpディレクトリを作成
+# --parallel / --d / --c 時: セッション固有tmpディレクトリを作成
 # 通常モード（Opus単体）: SESSION_TMPDIR は不要（null）
-if [ "$MODE" = "parallel" ] || [ "$MODE" = "d" ]; then
+if [ "$MODE" = "parallel" ] || [ "$MODE" = "d" ] || [ "$MODE" = "c" ]; then
   SESSION_TMPDIR=$(mktemp -d /tmp/rfl-review-XXXXXX)
 else
   SESSION_TMPDIR=""  # 通常モードでは使用しない
@@ -145,7 +149,7 @@ python "$HOME/.claude/scripts/review-feedback.py" inject --reviewer "review-fix-
 
 8. ループ開始通知:
 ```
-レビューループを開始します（最大5回）。
+⚠️ レビューループを開始します（最大5回）。
 対象ファイルをループ完了まで手動編集しないでください。
 ループ中のファイル変更は再レビュー時の差分検出に影響します。
 ```
@@ -162,7 +166,7 @@ python "$HOME/.claude/scripts/review-feedback.py" inject --reviewer "review-fix-
 並列実行方法・結果マージルール・注意事項はすべて `/ifr`（`ifr.md`）の「並列レビューモード」セクションに定義されている。
 
 - `/rfl --parallel` → 各ループのStep 1で `/ifr --parallel` 相当の3モデル並列レビューを実行
-- `--parallel` なし・`--d` なし → 従来通りAgentツール（Opus）のみで実行
+- `--parallel` なし・`--d` なし・`--c` なし → 従来通りAgentツール（Opus）のみで実行
 
 **`--parallel` 時の結果マージ手順:**
 
@@ -193,7 +197,7 @@ Opus 4.6（Agentツール）+ Codex gpt-5.4（codex exec）の**2モデルペア
 実行方法・結果マージルール・注意事項はすべて `/ifr`（`ifr.md`）の「Dual レビューモード」セクションに定義されている。
 
 - `/rfl --d` → 各ループのStep 1で `/ifr --d` 相当の2モデルペアレビューを実行
-- `--d` と `--parallel` は排他。両方指定時は `--d` を優先
+- `--d` と `--c` は排他。`--d` と `--parallel` も排他。両方指定時は `--d` を優先
 - **`IFR_MODE=review-only` を環境変数として渡す**（ifr.md の SESSION_TMPDIR クリーンアップスキップ条件。rfl Step 3以降で tmpdir を使用するため）
 
 **`--d` 時の結果マージ手順:**
@@ -215,6 +219,49 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 3. マージ結果（Markdown）をStep 2の入力として使用する
 
 **スクリプト失敗時のフォールバック:** `--parallel` と同一（メインコンテキストが手動マージ）。
+
+#### Codex dual レビューモード（`--c` 引数指定時）
+
+`--c` が指定された場合、**Codex GPT-5.4 を2インスタンス並列で実行する**。
+観点を分けることで単一インスタンスとの差別化を実現する。
+
+- **Codex インスタンス1（品質・設計観点）**: コード品質・設計一貫性・可読性・命名・重複コードに集中
+- **Codex インスタンス2（セキュリティ・バグ検出観点）**: セキュリティ脆弱性・バグ・エッジケース・エラーハンドリングに集中
+- `--d` と `--c` は排他。`--c` と `--parallel` も排他（`--d` > `--c` > `--parallel` 優先）
+
+**`--c` 時の並列実行手順:**
+
+各インスタンスに専用プロンプトを渡して `codex exec` で実行:
+
+インスタンス1（品質・設計）のプロンプト追加指示:
+```text
+## レビュー観点（品質・設計）
+- コード品質・設計一貫性・可読性・命名規則・重複コードに集中してレビューしてください
+- セキュリティ・バグ検出は対象外（別インスタンスが担当）
+```
+
+インスタンス2（セキュリティ・バグ検出）のプロンプト追加指示:
+```text
+## レビュー観点（セキュリティ・バグ検出）
+- セキュリティ脆弱性・バグ・エッジケース・エラーハンドリング漏れに集中してレビューしてください
+- コード品質・設計観点は対象外（別インスタンスが担当）
+```
+
+1. 各インスタンスの出力を tmpファイルに保存:
+   - インスタンス1 → `"$SESSION_TMPDIR"/codex1-review.md`
+   - インスタンス2 → `"$SESSION_TMPDIR"/codex2-review.md`
+
+2. マージスクリプトを `--input` 可変引数で実行:
+```bash
+python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
+  --input codex1:"$SESSION_TMPDIR"/codex1-review.md \
+  --input codex2:"$SESSION_TMPDIR"/codex2-review.md \
+  --format markdown --stats
+```
+
+3. マージ結果（Markdown）を Step 2 の入力として使用する
+
+**スクリプト失敗時のフォールバック:** `--d` と同一（メインコンテキストが手動マージ）。
 
 #### サブエージェントへのプロンプト構成（共通）:
 ```
@@ -312,16 +359,16 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 **修正ファイルの記録（Step 4の再レビュー対象限定に使用）:**
 Step 3で実際に修正したファイルの一覧を記録し、ループ状態ファイルの `last_modified_files` に保存する。Step 4はこの一覧のみを再レビュー対象とする（`base_rev` からの全差分ではなく、直前ループで触ったファイルに限定）。
 
-#### 通常モード（`--d` なし）: メインコンテキストで修正
+#### 通常モード（`--d` / `--c` なし）: メインコンテキストで修正
 
 **修正時の原則:**
 - メインコンテキストがプロジェクト全体の設計意図を把握しているため、修正精度が高い
 - サブエージェントの指摘をそのまま機械的に適用するのではなく、プロジェクト全体との整合性を確認してから修正する
 - 指摘が誤検知だと判断した場合は、修正せずその理由をユーザーに報告する
 
-#### Codex修正モード（`--d` 時）: Codexに修正を委譲
+#### Codex修正モード（`--d` / `--c` 時）: Codexに修正を委譲
 
-`--d` 指定時は、Step 2で分類した「自動修正可」の指摘をCodexに渡して修正させる。
+`--d` / `--c` 指定時は、Step 2で分類した「自動修正可」の指摘をCodexに渡して修正させる。
 
 **修正プロンプトの構成:**
 ```
@@ -350,6 +397,18 @@ cat "$PROMPT_FILE" | "${CODEX_PATH:-codex}" exec \
 CODEX_FIX_EXIT=$?
 [ $CODEX_FIX_EXIT -ne 0 ] && cat "$SESSION_TMPDIR"/codex-fix-stderr.log >&2
 rm -f "$PROMPT_FILE"
+# フォールバック条件チェック（exit code != 0 または ファイル無変更）
+CODEX_FAILED=false
+if [ $CODEX_FIX_EXIT -ne 0 ]; then
+  CODEX_FAILED=true
+  echo "WARN: Codex exit code $CODEX_FIX_EXIT → フォールバック修正を実行します" >&2
+elif git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git diff --quiet -- "${TARGET_FILE_PATHS[@]}"; then
+  # ※ TARGET_FILE_PATHS には対象ファイルの絶対パスを渡すこと（ディレクトリ依存を排除。未指定だと CWD の差分しか見ない）
+  CODEX_FAILED=true  # git管理下で変更なし
+  echo "WARN: Codexがファイルを変更しませんでした → フォールバック修正を実行します" >&2
+fi
+# $CODEX_FAILED = true の場合: 後述の「Codex修正失敗時のフォールバック」セクションに従い、
+# メインコンテキストが通常モードと同じ方法で修正を実行する
 ```
 
 **Codex修正後の確認:**
@@ -396,7 +455,7 @@ node -e "[サブエージェントが主張する挙動を再現するコード]
 # git未管理時は last_modified_files をそのまま使用
 ```
 
-Step 3で `last_modified_files` に記録されたファイル一覧を再レビュー対象とし、Step 1と同じ構造（`--parallel` 時は `/ifr --parallel` と同じ3モデル並列）で新しいサブエージェントを起動する。
+Step 3で `last_modified_files` に記録されたファイル一覧を再レビュー対象とし、Step 1と同じ構造（`--parallel` 時は `/ifr --parallel` 相当、`--d` 時は `/ifr --d` 相当、`--c` 時は Codex dual レビュー）で新しいサブエージェントを起動する。
 
 **前回のサブエージェントとは完全に独立** — 前回の修正コンテキストを知らないから、忖度が構造的に発生しない。
 
@@ -416,27 +475,16 @@ Step 3で `last_modified_files` に記録されたファイル一覧を再レビ
 ```
 
 **判定（優先順位順）:**
-```
-severity: critical かつ auto_fixable: false が存在
-  → ループ中断、ユーザーに即確認（蓄積ルールの例外と同一）
 
-全指摘数 = 0件
-  → Step 5（完了）へ直行（クリーン状態）
+1. `severity: critical` かつ `auto_fixable: false` が存在 → **ループ中断**。ユーザーに即確認（蓄積ルールの例外と同一）
+2. 全指摘数 = 0件 → **Step 5（完了）へ直行**（クリーン状態）
+3. 自動修正可（`auto_fixable: true` かつ Warning以上）= 0件 → **Step 5（完了）へ**（要確認は蓄積済み、完了時に一括提示）
+4. 誤検知率 > 50%（= 誤検知数 / 全指摘数 > 0.5）かつ 残存の自動修正可（Warning以上）= 0件 → **Step 5（完了）へ**（残存指摘は「誤検知の可能性が高い」として報告）
+   ※ 残存の自動修正可（Warning以上）> 0件の場合は誤検知率に関わらずループ継続
+5. 自動修正可 > 0件 かつ ループ回数 < 5 → **Step 2へ戻る**
+6. 自動修正可 > 0件 かつ ループ回数 = 5 → **Step 6（ループ上限到達）へ**
 
-自動修正可（auto_fixable: true かつ Warning以上）= 0件
-  → Step 5（完了）へ（要確認は蓄積済み、完了時に一括提示）
-
-誤検知率 > 50%（= 誤検知数 / 全指摘数 > 0.5）かつ残存の自動修正可（Warning以上）= 0件
-  → 実質クリーンとして Step 5（完了）へ
-  → 残存指摘はユーザーに「誤検知の可能性が高い」として報告する
-  ※ 残存の自動修正可（Warning以上）> 0件の場合は誤検知率に関わらずループ継続
-
-自動修正可 > 0件 かつ ループ回数 < 5
-  → Step 2へ戻る
-
-自動修正可 > 0件 かつ ループ回数 = 5
-  → Step 6（ループ上限到達）へ
-```
+> ※ 判定5・6の「ループ回数」は、ループ状態ファイル更新（`"loop": N+1`）後の値を指す。判定実施前に `loop` カウンターを更新してから比較すること。
 
 **要確認はループ判定に含めない。** 蓄積してループ完了時に一括提示する。
 
@@ -496,6 +544,15 @@ X回のループでクリーンになりました。
 ...
 ```
 
+### /go-robust 自動実行（Step 5 終了後）
+
+> **TODO:** rfl が外部から `mode: "review-only"` を受け取る仕組みを実装した際に `/go-robust` スキップ条件を追加する（現時点では発火しない）。
+
+完了報告・要確認の一括提示が終わったら、即座に `/go-robust` を実行する。
+`/go-robust` は Step 0 で要確認件数をチェックし、0件なら「要確認なし。対応不要。」として自動終了する。
+要確認が残っている場合は堅牢性優先方針で判断・処理可能なものを全件実行する。
+**`/go-robust` はコミット・プッシュまで完了させる責務を持つ（分岐ロジックは go-robust の Step 5 に従う）。**
+
 ---
 
 ### Step 6: ループ上限到達（5回後も残存問題あり）
@@ -524,11 +581,20 @@ python "$HOME/.claude/scripts/review-feedback.py" close-session \
 ### 残存 Warning
 - [問題] @ [ファイル名:行番号]
 
-commitは行っていません。
+commitは行っていません（/go-robust が処理可能な修正を実行後、自動でコミット・プッシュします）。
 方針を教えてもらえれば、続けて修正します。
 ```
 
 **蓄積された要確認も同時に提示する（pending_confirmations が空でない場合、Step 5と同じフォーマット）。**
+
+### /go-robust 自動実行（Step 6 終了後）
+
+> **TODO:** rfl が外部から `mode: "review-only"` を受け取る仕組みを実装した際に `/go-robust` スキップ条件を追加する（現時点では発火しない）。
+
+残存問題・要確認の提示が終わったら、即座に `/go-robust` を実行する。
+`/go-robust` は Step 0 で要確認件数をチェックし、0件なら「要確認なし。対応不要。」として自動終了する。
+要確認が残っている場合は堅牢性優先方針で判断・処理可能なものを全件実行する。
+**`/go-robust` はコミット・プッシュまで完了させる責務を持つ（分岐ロジックは go-robust の Step 5 に従う）。**
 
 ---
 
@@ -543,8 +609,13 @@ commitは行っていません。
 - **要確認は蓄積してループ完了後に一括提示**: ループをブロックしない。ただし severity: critical かつ auto_fixable: false の場合のみ即中断してユーザーに確認する。堅牢方向の自動選択ルール・自律修正原則に該当する場合は自動修正してよい（詳細は ifr.md 参照）
 - **Info以下はループ対象外**: Warning以上のみをループ判定に使用
 - **commitは最後の1回だけ**: 途中ループでのcommitは禁止（差分が追えなくなるため）
-- **メインコンテキストは修正の妥当性を判断する権限を持つ**: サブエージェントの指摘が誤検知の場合、修正せずにスキップしてよい（理由をユーザーに報告する）。`--d` 時はCodexが修正を実行するが、メインコンテキストが差分を確認し、明らかに誤った修正はrevertする
+- **メインコンテキストは修正の妥当性を判断する権限を持つ**: サブエージェントの指摘が誤検知の場合、修正せずにスキップしてよい（理由をユーザーに報告する）。`--d` / `--c` 時はCodexが修正を実行するが、メインコンテキストが差分を確認し、明らかに誤った修正はrevertする
 - **速度より精度を優先**: サブエージェント起動コストを惜しまない。高精度なレビューのためのトレードオフ
-- **`--d` 時のCodex修正フォールバック**: Codex修正失敗（exit code != 0 or 無変更）時はメインコンテキストが通常モードで修正する
+- **`--d` / `--c` 時のCodex修正フォールバック**: Codex修正失敗（exit code != 0 or 無変更）時はメインコンテキストが通常モードで修正する
+- **`--d` / `--c` / `--parallel` は排他**: 優先順位は `--d` > `--c` > `--parallel`。複数指定時は上位モードを採用する
 - **/commit自動実行は現状維持**: Step 5完了時にユーザー確認なしで `/commit` を自動実行する。git管理下プロジェクトではループ完了→commit→pushまでを一気通貫で行う設計方針（2026-03-30決定）
-- **このファイルを編集した場合**: `~/.claude/skills/rfl/SKILL.md` を直接編集すれば、次回 `/rfl` 実行時から変更が反映される
+- **rfl.md は review-fix-loop.md のコピー**: Edit/Write ツールがハードリンク/シンボリックリンクを破壊するため、コピースクリプトで自動同期する。review-fix-loop.md を編集した後は必ず以下を実行:
+  ```bash
+  python "$HOME/.claude/scripts/sync-rfl.py"
+  ```
+  スクリプトは review-fix-loop.md → rfl.md への内容コピーと整合性検証を自動実行する
