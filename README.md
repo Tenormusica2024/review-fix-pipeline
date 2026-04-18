@@ -92,6 +92,34 @@ Key behaviors:
 - **Loop state persisted to JSON** — survives context compaction; resumes from the correct loop number
 - **Parallel review modes** — `--d` (Opus + Codex dual review) and `--parallel` (3-model consensus)
 
+### `go-robust` — Requires-Confirmation Processor
+
+Applies five principles to every `requires_confirmation` item from a review and resolves whatever can be decided without further input:
+
+1. Robustness / maintainability / stability first
+2. On uncertainty, bias toward the safer assumption
+3. No silent problems — anything anomalous must be detectable (exception, log, assertion)
+4. Keep the change necessary and sufficient — no gratuitous refactors
+5. AI-agent readability / long-term maintainability — a fresh-context agent should be able to navigate the file immediately
+
+Runs automatically after `/ifr` and `/rfl` finish. Items that still require human judgment are surfaced; everything else is committed and pushed.
+
+---
+
+## Enforcement Hooks (optional)
+
+To guarantee `/go-robust` runs before review output is returned to the user, install the two hooks in `hooks/`:
+
+- `enforce-go-robust-submit.py` — UserPromptSubmit. Tracks when `/ifr`, `/rfl`, `/brutal-review`, or `/go-robust` is invoked and records the session state in `~/.claude/state/go-robust-enforce/<session_id>.json`.
+- `enforce-go-robust-stop.py` — Stop. When the assistant's last message contains `requires_confirmation` markers (`## 要確認` + severity + `auto_fixable: false`, or the `─────` separator) and `/go-robust` has not yet run for the current review cycle, returns `decision: "block"` with a reason so the runtime forces `/go-robust` to execute.
+
+Escape hatches (for the rare case you explicitly want to skip):
+
+- `--no-go-robust` flag on the review command (one-shot bypass for the current cycle)
+- `/skip-go-robust-once` command issued after the review output (one-shot bypass for the next response)
+
+Safety caps: `stop_hook_active` short-circuits; each cycle is capped at `MAX_ENFORCE = 2` blocks; `bypass_once` is consumed after a single use.
+
 ---
 
 ## Setup
