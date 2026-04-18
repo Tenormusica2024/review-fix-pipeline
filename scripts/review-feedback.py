@@ -59,11 +59,15 @@ CREATE TABLE IF NOT EXISTS findings (
 );
 """
 
-# inject時にopenセッションを作り、record/close-sessionで閉じるテーブル
+# inject時にopenセッションを作り、record/close-sessionで閉じるテーブル。
+# repo_root を保持する理由: 同一 session_id で別リポジトリを移動した場合に
+# inject/record/close-session のマッチが誤って別リポジトリのセッションに刺さるのを防ぐ。
+# NULL 許容にしている理由: 既存 DB（repo_root カラム追加前）との後方互換。
 SESSIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS review_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id TEXT,
+    repo_root TEXT,
     reviewer TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
     started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
@@ -83,7 +87,19 @@ CREATE INDEX IF NOT EXISTS idx_findings_file_path ON findings(file_path);
 CREATE INDEX IF NOT EXISTS idx_findings_pending ON findings(resolution, severity, created_at);
 CREATE INDEX IF NOT EXISTS idx_repo_file ON findings(repo_root, file_path);
 CREATE INDEX IF NOT EXISTS idx_review_sessions_status ON review_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_review_sessions_lookup ON review_sessions(reviewer, repo_root, status);
 """
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, defn: str) -> None:
+    """既存 DB にカラムが無ければ追加する（SQLite ALTER TABLE ADD COLUMN 冪等化）。
+
+    SQLite には ``ADD COLUMN IF NOT EXISTS`` が無いため、PRAGMA table_info で存在確認してから
+    ALTER を発行する。新規 DB では CREATE TABLE が既に完了しているので no-op になる。
+    """
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {defn}")
 
 
 def get_connection() -> sqlite3.Connection:
@@ -95,7 +111,15 @@ def get_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     # CREATE TABLE/INDEX は IF NOT EXISTS で冪等 → 毎回実行して既存 DB にも変更を反映
     # executescript() は暗黙 COMMIT を発行するため、個別 execute() で代替してトランザクション汚染を防ぐ
-    for ddl in (SCHEMA + SESSIONS_SCHEMA + INDEXES).split(";"):
+    for ddl in (SCHEMA + SESSIONS_SCHEMA).split(";"):
+        stmt = ddl.strip()
+        if stmt:
+            conn.execute(stmt)
+    # 既存 DB 向けのマイグレーション: review_sessions.repo_root は後付けカラムなので
+    # CREATE TABLE IF NOT EXISTS では増えない。ALTER TABLE ADD COLUMN で補完する。
+    # INDEX より先に実行しないと idx_review_sessions_lookup 作成時にカラム欠落で失敗する。
+    _ensure_column(conn, "review_sessions", "repo_root", "TEXT")
+    for ddl in INDEXES.split(";"):
         stmt = ddl.strip()
         if stmt:
             conn.execute(stmt)
@@ -188,7 +212,10 @@ def cmd_record(args):
             inserted_ids.append(cursor.lastrowid)
 
         # openセッションをclosedに更新
-        # session_id がある場合は同一セッションのみを対象にする（並行実行・複数リポジトリでの誤閉じを防止）
+        # session_id / repo_root で同一セッション・同一リポジトリに絞り込む
+        # （並行実行・複数リポジトリ切替時の誤閉じを防止）。
+        # SQLite の ``IS`` 演算子は NULL-safe 等価比較なので、repo_root が未設定（None）の
+        # 古いセッションも「NULL IS NULL」で拾える。
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         session_clause = "AND session_id=?" if session_id else ""
         session_param = [session_id] if session_id else []
@@ -197,10 +224,10 @@ def cmd_record(args):
                SET status='closed', closed_at=?, findings_count=?, close_reason='recorded'
                WHERE id = (
                    SELECT id FROM review_sessions
-                   WHERE reviewer=? AND status='open' {session_clause}
+                   WHERE reviewer=? AND status='open' AND repo_root IS ? {session_clause}
                    ORDER BY started_at DESC LIMIT 1
                )""",
-            [now, len(inserted_ids), args.reviewer] + session_param,
+            [now, len(inserted_ids), args.reviewer, repo_root] + session_param,
         ).rowcount
         if updated == 0:
             print("Warning: 対応するopenセッションが見つかりません（後方互換で記録は継続）", file=sys.stderr)
@@ -405,6 +432,9 @@ def cmd_summary(args):
 def cmd_inject(args):
     """過去の誤検知パターン出力 + レビューセッションをopenで作成する。"""
     session_id = args.session_id if args.session_id else get_session_id()
+    # repo_root は inject と close/record の突き合わせキー。同一セッション内で repo を
+    # 切り替えた場合でも、別リポジトリの open session を誤って潰さないようにする。
+    repo_root = get_repo_root()
 
     conn = get_connection()
     try:
@@ -432,16 +462,17 @@ def cmd_inject(args):
             (args.reviewer,),
         ).fetchall()
 
-        # 同一reviewer × 同一session_idの既存openセッションだけをcloseする（重複防止）。
+        # 同一reviewer × 同一session_id × 同一repo_rootの既存openセッションだけをcloseする（重複防止）。
         # 別セッション（別ターミナル・別リポジトリ・並行ループ）を巻き込まないため
-        # session_id を一致条件に含める。session_id が取れない場合は
+        # session_id と repo_root を一致条件に含める。session_id が取れない場合は
         # 既存 open session を閉じずに WARN を出して並行実行を守る。
+        # repo_root 比較に SQLite の ``IS`` を使っているのは NULL 同士を NULL-safe に等価判定するため。
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         if session_id:
             conn.execute(
                 """UPDATE review_sessions SET status='closed', closed_at=?, close_reason='superseded'
-                   WHERE reviewer=? AND session_id=? AND status='open'""",
-                (now, args.reviewer, session_id),
+                   WHERE reviewer=? AND session_id=? AND repo_root IS ? AND status='open'""",
+                (now, args.reviewer, session_id, repo_root),
             )
         else:
             sys.stderr.write(
@@ -451,8 +482,8 @@ def cmd_inject(args):
 
         # レビューセッションをopenで作成（構造的強制の起点）
         conn.execute(
-            "INSERT INTO review_sessions (session_id, reviewer, status) VALUES (?, ?, 'open')",
-            (session_id, args.reviewer),
+            "INSERT INTO review_sessions (session_id, repo_root, reviewer, status) VALUES (?, ?, ?, 'open')",
+            (session_id, repo_root, args.reviewer),
         )
         conn.commit()
     finally:
@@ -508,11 +539,14 @@ def cmd_check_open_sessions(args):
 def cmd_close_session(args):
     """findings 0件でセッションを閉じる（問題なし / 中断時）。"""
     session_id = getattr(args, "session_id", None) or get_session_id()
+    # repo_root を突き合わせキーに含めて、別リポジトリの open session を誤って閉じない。
+    repo_root = get_repo_root()
     conn = get_connection()
     try:
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         reason = args.reason or "manual-close"
-        # session_id がある場合は同一セッションのみを対象にする（並行実行・複数リポジトリでの誤閉じを防止）
+        # session_id / repo_root で並行実行・複数リポジトリでの誤閉じを防止。
+        # ``IS`` を使うことで NULL-safe 等価比較になる（旧 DB の repo_root=NULL 行とも整合）。
         session_clause = "AND session_id=?" if session_id else ""
         session_param = [session_id] if session_id else []
         updated = conn.execute(
@@ -520,10 +554,10 @@ def cmd_close_session(args):
                SET status='closed', closed_at=?, findings_count=0, close_reason=?
                WHERE id = (
                    SELECT id FROM review_sessions
-                   WHERE reviewer=? AND status='open' {session_clause}
+                   WHERE reviewer=? AND status='open' AND repo_root IS ? {session_clause}
                    ORDER BY started_at DESC LIMIT 1
                )""",
-            [now, reason, args.reviewer] + session_param,
+            [now, reason, args.reviewer, repo_root] + session_param,
         ).rowcount
         conn.commit()
     finally:
