@@ -85,7 +85,7 @@ PROMPT_FILE=$(mktemp "$SESSION_TMPDIR"/codex1-prompt-XXXXXX.txt)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 [レビュールール + ファイルパス一覧（内容は埋め込まない）]
 PROMPT_EOF
-cat "$PROMPT_FILE" | "${CODEX_PATH:-C:/Users/Tenormusica/.npm-global/codex}" exec \
+cat "$PROMPT_FILE" | "${CODEX_PATH:-codex}" exec \
   --dangerously-bypass-approvals-and-sandbox > "$SESSION_TMPDIR"/codex1-review.md
 rm -f "$PROMPT_FILE"
 # インスタンス2も同様
@@ -99,7 +99,7 @@ rm -f "$PROMPT_FILE"
 
 2. マージスクリプトを実行:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
+python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
   --input codex1:"$SESSION_TMPDIR"/codex1-review.md \
   --input codex2:"$SESSION_TMPDIR"/codex2-review.md \
   --format markdown --stats

@@ -19,10 +19,7 @@ user-invocable: true
 
 ## 原則 5 の詳細: AIエージェント可読性 / 長期保守性
 
-**適用対象:** ユーザーが「長期的に使う」と明示した主要プロジェクト（例: `curiosity-wiki`）。他プロジェクトでも基本的に適用する（短期スクリプト・実験コードを除く）。
-
-**宣言（ユーザー原文）:**
-> 他の人間が介入するかどうかについてはしない可能性は高いけど、基本的に長期的な将来的にAIエージェントが判断ミスや理解をするまでに時間がかかる、機能改修の難度が上がる、あるいはリファクタリングが必要と判断されるような複雑、イレギュラーな構造にはなっていてほしくない。
+**適用対象:** 長期保守を前提とする主要プロジェクト。短期スクリプト・実験コードは対象外。
 
 **判定基準:** フレッシュセッションのAIエージェント（文脈なし）がファイル単体を読んで、責務・データフロー・非自明な意思決定を即座に理解できるか。
 
@@ -41,11 +38,6 @@ user-invocable: true
 - 共通ヘルパー化にあたって API を破壊的変更する必要がある場合
 - 原子性保証などアーキテクチャレベルの方式選定（`O_EXCL` vs `mkdir` vs `filelock` 等）
 
-**詳細原則・NGパターン集:**
-`C:/Users/Tenormusica/.openclaw/curiosity-wiki/raw/openclaw-workspace/system/architectural_principles.md`
-
-**Dual Source of Truth:** この原則は LLMWIKI の `architectural_principles.md` と本 SKILL.md の両方に記載されている。片方だけ更新するのは禁止。両方同時に更新する。
-
 ## 実行手順
 
 ### Step 0: 要確認の有無チェック（早期終了）
@@ -57,7 +49,7 @@ user-invocable: true
 - 直近のレビュー出力の「要確認」セクションを参照 → 件数をカウント
 - 会話履歴に要確認セクションがない場合のみ `review-feedback.db` を確認:
   ```bash
-  python "C:\Users\Tenormusica\.claude\scripts\review-feedback.py" query --resolution pending
+  python "$HOME/.claude/scripts/review-feedback.py" query --resolution pending
   ```
 
 **判定:**

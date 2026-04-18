@@ -97,7 +97,7 @@ if [ "$MODE" = "parallel" ]; then
     echo "ERROR: ZAI_AUTH_TOKEN が未設定。GLM並列レビューを実行できません" >&2
     echo "→ GLMなしで Opus + Codex の2モデルで実行します" >&2
   fi
-  CODEX_CMD="${CODEX_PATH:-C:/Users/Tenormusica/.npm-global/codex}"
+  CODEX_CMD="${CODEX_PATH:-codex}"
   if ! command -v "$CODEX_CMD" &>/dev/null && [ ! -f "$CODEX_CMD" ]; then
     echo "ERROR: Codex CLI が見つかりません（CODEX_PATH=${CODEX_PATH:-未設定}）" >&2
     echo "→ Codexなしで Opus + GLM の2モデルで実行します" >&2
@@ -105,7 +105,7 @@ if [ "$MODE" = "parallel" ]; then
 fi
 # --d / --c 時: Codex のみチェック（GLMは使用しない。両モードで処理が同一のため統合）
 if [ "$MODE" = "d" ] || [ "$MODE" = "c" ]; then
-  CODEX_CMD="${CODEX_PATH:-C:/Users/Tenormusica/.npm-global/codex}"
+  CODEX_CMD="${CODEX_PATH:-codex}"
   if ! command -v "$CODEX_CMD" &>/dev/null && [ ! -f "$CODEX_CMD" ]; then
     echo "ERROR: Codex CLI が見つかりません（CODEX_PATH=${CODEX_PATH:-未設定}）" >&2
     echo "→ Opus Agent単体レビュー + メインコンテキスト修正にフォールバックします" >&2
@@ -144,7 +144,7 @@ fi
 
 7. Review Feedbackセッション開始:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" inject --reviewer "review-fix-loop"
+python "$HOME/.claude/scripts/review-feedback.py" inject --reviewer "review-fix-loop"
 ```
 
 8. ループ開始通知:
@@ -179,7 +179,7 @@ python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" inject --review
 
 2. マージスクリプトを実行:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
+python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
   --opus "$SESSION_TMPDIR"/opus-review.md \
   --glm "$SESSION_TMPDIR"/glm-review.md \
   --codex "$SESSION_TMPDIR"/codex-review.md \
@@ -210,7 +210,7 @@ Opus 4.6（Agentツール）+ Codex gpt-5.4（codex exec）の**2モデルペア
 
 2. マージスクリプトを `--input` 可変引数で実行:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
+python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
   --input opus:"$SESSION_TMPDIR"/opus-review.md \
   --input codex:"$SESSION_TMPDIR"/codex-review.md \
   --format markdown --stats
@@ -253,7 +253,7 @@ python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
 
 2. マージスクリプトを `--input` 可変引数で実行:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
+python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
   --input codex1:"$SESSION_TMPDIR"/codex1-review.md \
   --input codex2:"$SESSION_TMPDIR"/codex2-review.md \
   --format markdown --stats
@@ -317,7 +317,7 @@ python "C:/Users/Tenormusica/.claude/scripts/merge_parallel_reviews.py" \
 **蓄積ルール:**
 - 要確認はループ状態ファイルの `pending_confirmations` に追加し、**ループをブロックしない**。重複排除: `file_path + 行番号(±3行) + タイトル` が既存項目と一致する場合は新規追加せず、`detected_loops` リストにループ番号を追記する
 - ループ判定（Warning以上 = 0件）は `auto_fixable: true` の指摘のみで判定する
-- **例外: severity が critical かつ auto_fixable が false の要確認はループを中断**し、即座にユーザーに確認する（設計変更を伴う修正を自動で進めるとループ方向がズレるため）。中断時はループ状態ファイルを削除し、`python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" close-session --reviewer "review-fix-loop" --reason "critical-interrupt"` を実行してからユーザーに報告する
+- **例外: severity が critical かつ auto_fixable が false の要確認はループを中断**し、即座にユーザーに確認する（設計変更を伴う修正を自動で進めるとループ方向がズレるため）。中断時はループ状態ファイルを削除し、`python "$HOME/.claude/scripts/review-feedback.py" close-session --reviewer "review-fix-loop" --reason "critical-interrupt"` を実行してからユーザーに報告する
 - メインコンテキストが誤検知と判断してスキップした指摘は、severityに関わらず `false_positive_counts` を+1する
 - ループ完了後（Step 5 or Step 6）に蓄積した要確認を一括提示する
 
@@ -392,7 +392,7 @@ PROMPT_FILE=$(mktemp "$SESSION_TMPDIR"/codex-fix-prompt-XXXXXX.txt)
 cat > "$PROMPT_FILE" << 'PROMPT_EOF'
 [上記の修正プロンプト]
 PROMPT_EOF
-cat "$PROMPT_FILE" | "${CODEX_PATH:-C:/Users/Tenormusica/.npm-global/codex}" exec \
+cat "$PROMPT_FILE" | "${CODEX_PATH:-codex}" exec \
   --dangerously-bypass-approvals-and-sandbox 2>"$SESSION_TMPDIR"/codex-fix-stderr.log
 CODEX_FIX_EXIT=$?
 [ $CODEX_FIX_EXIT -ne 0 ] && cat "$SESSION_TMPDIR"/codex-fix-stderr.log >&2
@@ -508,15 +508,15 @@ commit & push なし。
 Review Feedback記録・セッション終了（排他的分岐）:
 ```bash
 # findings を処理した場合、または pending_confirmations が空でない場合（修正して完了）
-python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" record \
+python "$HOME/.claude/scripts/review-feedback.py" record \
   --reviewer "review-fix-loop" \
   --findings '[{"summary":"...","severity":"critical|warning","category":"...","file_path":"...","score":N}]'
 # score: 1-5の深刻度スコア（1=軽微, 3=中程度, 5=致命的）。severityをより細粒度で表現する
-python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" close-session \
+python "$HOME/.claude/scripts/review-feedback.py" close-session \
   --reviewer "review-fix-loop" --reason "completed"
 
 # findings が 0件 かつ pending_confirmations も空で完了した場合（排他: 上記と同時に実行しない）
-python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" close-session \
+python "$HOME/.claude/scripts/review-feedback.py" close-session \
   --reviewer "review-fix-loop" --reason "no-findings"
 ```
 
@@ -566,7 +566,7 @@ commitせず、残存問題をそのまま報告する。
 
 Review Feedbackセッション終了:
 ```bash
-python "C:/Users/Tenormusica/.claude/scripts/review-feedback.py" close-session \
+python "$HOME/.claude/scripts/review-feedback.py" close-session \
   --reviewer "review-fix-loop" --reason "limit-reached"
 ```
 
@@ -616,6 +616,6 @@ commitは行っていません（/go-robust が処理可能な修正を実行後
 - **/commit自動実行は現状維持**: Step 5完了時にユーザー確認なしで `/commit` を自動実行する。git管理下プロジェクトではループ完了→commit→pushまでを一気通貫で行う設計方針（2026-03-30決定）
 - **rfl.md は review-fix-loop.md のコピー**: Edit/Write ツールがハードリンク/シンボリックリンクを破壊するため、コピースクリプトで自動同期する。review-fix-loop.md を編集した後は必ず以下を実行:
   ```bash
-  python "C:/Users/Tenormusica/.claude/scripts/sync-rfl.py"
+  python "$HOME/.claude/scripts/sync-rfl.py"
   ```
   スクリプトは review-fix-loop.md → rfl.md への内容コピーと整合性検証を自動実行する
