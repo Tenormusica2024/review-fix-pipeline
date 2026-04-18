@@ -26,6 +26,24 @@ jobs:
         run: |
           python -m compileall -q hooks/ scripts/
 
+      - name: Install Ruff
+        # pyproject.toml の [tool.ruff] を fmt/lint の Single Source of Truth として
+        # CI で強制するため、SSoT 宣言だけで終わらせず実ゲートにする。
+        # バージョン固定の根拠: ruff は minor bump でも lint/format 出力が変わりうる。
+        # 未固定だと「昨日通ったCIが今日落ちる」という再現性崩壊が起きるため固定する。
+        # 更新は意図的に pyproject.toml とセットで bump する運用。
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "ruff==0.15.11"
+
+      - name: Ruff lint (pyproject.toml SSoT)
+        run: |
+          ruff check hooks scripts
+
+      - name: Ruff format check (pyproject.toml SSoT)
+        run: |
+          ruff format --check hooks scripts
+
       - name: Smoke test — merge_parallel_reviews.py --help
         run: |
           python scripts/merge_parallel_reviews.py --help > /dev/null

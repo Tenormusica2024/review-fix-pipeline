@@ -1,6 +1,10 @@
 # Single Source of Truth for Python formatting/linting in this repo.
 # Rationale: 複数人 / fresh session AI がフォーマッタをかけても同じ結果になるよう、
 # ruff の設定をここで固定する。settings が無いと全ファイル diff が発生しうる。
+#
+# Expected ruff version: 0.15.11
+# CI では .github/workflows/ci.yml で `pip install "ruff==0.15.11"` として固定している。
+# ローカル整形時もこのバージョンを使うこと。bump する場合は CI 側とセットで更新する。
 
 [tool.ruff]
 # hooks/ と scripts/ は Python 3.10+ の `|` 型ヒントや型注釈を前提としているため

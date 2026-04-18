@@ -76,20 +76,27 @@ def _state_path(session_id: str) -> Path | None:
     さらに最終パスが STATE_DIR 配下に収まっていることも resolve() 後に検証する。
     """
     if not SAFE_SESSION_ID_PATTERN.match(session_id):
-        sys.stderr.write(
-            f"[enforce-go-robust-submit] unsafe session_id rejected: {session_id!r}\n"
-        )
+        sys.stderr.write(f"[enforce-go-robust-submit] unsafe session_id rejected: {session_id!r}\n")
         return None
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     path = (STATE_DIR / f"{session_id}.json").resolve()
     try:
         path.relative_to(STATE_DIR.resolve())
     except ValueError:
-        sys.stderr.write(
-            f"[enforce-go-robust-submit] state path escaped STATE_DIR: {path}\n"
-        )
+        sys.stderr.write(f"[enforce-go-robust-submit] state path escaped STATE_DIR: {path}\n")
         return None
     return path
+
+
+class StateCorrupted(Exception):
+    """state ファイルは存在するが読めなかった（JSON 破損等）ことを示す。
+
+    fail-closed 設計: submit hook 側で corrupted state を _default_state() で
+    上書きすると last_review_command / last_go_robust / bypass_once が消え、
+    次の stop hook が「state なし = 何もしなくて良い」と誤解して enforcement が
+    抜ける。呼び出し側で明示的に例外を捕捉し、壊れた state をそのまま残して
+    stop hook 側の fail-closed 判定に倒す。
+    """
 
 
 def load_state(session_id: str) -> dict:
@@ -98,12 +105,9 @@ def load_state(session_id: str) -> dict:
         return _default_state(session_id)
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        # state壊れてたら作り直す（サイレント失敗を避けるためstderrに記録）
-        sys.stderr.write(
-            f"[enforce-go-robust-submit] state file corrupted, reset: {path}\n"
-        )
-        return _default_state(session_id)
+    except Exception as exc:
+        sys.stderr.write(f"[enforce-go-robust-submit] state file corrupted: {path}: {exc}\n")
+        raise StateCorrupted(str(path)) from exc
 
 
 def save_state(session_id: str, state: dict) -> None:
@@ -119,9 +123,7 @@ def save_state(session_id: str, state: dict) -> None:
         return
     tmp_path = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
     try:
-        tmp_path.write_text(
-            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        tmp_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(tmp_path, path)
     except Exception:
         # 書き込み失敗時は tmp を掃除しておく（次回実行を邪魔しないため）
@@ -132,9 +134,7 @@ def save_state(session_id: str, state: dict) -> None:
         raise
 
 
-REVIEW_COMMANDS = frozenset(
-    {"ifr", "rfl", "intent-first-review", "review-fix-loop"}
-)
+REVIEW_COMMANDS = frozenset({"ifr", "rfl", "intent-first-review", "review-fix-loop"})
 
 
 def _first_command(prompt: str) -> tuple[str, str] | None:
@@ -164,14 +164,31 @@ def main() -> int:
     prompt = data.get("prompt") or ""
     session_id = data.get("session_id") or ""
     if not session_id or not prompt:
+        # session_id か prompt のいずれかが欠けていると state 追跡ができない。
+        # submit hook は decision:"block" を返せないため enforcement は stop hook に委ねるが、
+        # 検知可能な形で残すため stderr には記録する（fail-closed 原則の一部）。
+        if not session_id:
+            sys.stderr.write(
+                "[enforce-go-robust-submit] session_id missing; state untracked for this turn\n"
+            )
         return 0
 
-    state = load_state(session_id)
+    try:
+        state = load_state(session_id)
+    except StateCorrupted:
+        # 破損 state を _default_state() で上書きすると stop hook が「正常 state = 要処理なし」と
+        # 判定して enforcement が抜ける。ここでは state を触らず壊れたファイルをそのまま残し、
+        # stop hook 側の fail-closed ブロックに倒す。
+        sys.stderr.write(
+            "[enforce-go-robust-submit] state corrupted; skipping update to preserve fail-closed block\n"
+        )
+        return 0
+
     now = datetime.now(timezone.utc).isoformat()
     changed = False
 
     parsed = _first_command(prompt)
-    cmd, cmd_args = (parsed if parsed is not None else (None, ""))
+    cmd, cmd_args = parsed if parsed is not None else (None, "")
 
     # 脱出口: 先頭コマンド /skip-go-robust-once、または
     # 先頭のレビューコマンドに付いた --no-go-robust フラグ。

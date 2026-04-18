@@ -41,11 +41,11 @@ Separate review and fix into **independent contexts**. Each reviewer is a fresh 
                     │  Modified files only            │    (knows nothing of A)
                     └────────────────┬────────────────┘
                                      │
-                         ┌───────────▼───────────┐
-                         │  Still auto_fixable?  │
-                         │  Yes → loop (max 5)   │
-                         │  No  → commit & push  │
-                         └───────────────────────┘
+                         ┌─────────────────────────────────┐
+                         │  Still auto_fixable?            │
+                         │  Yes → loop (max 5)             │
+                         │  No  → /go-robust → commit/push │
+                         └─────────────────────────────────┘
 ```
 
 ---
@@ -111,20 +111,22 @@ Runs automatically after `/ifr` and `/rfl` finish. Items that still require huma
 To guarantee `/go-robust` runs before review output is returned to the user, install the two hooks in `hooks/`:
 
 - `enforce-go-robust-submit.py` — UserPromptSubmit. Tracks when `/ifr`, `/rfl`, or `/go-robust` is invoked and records the session state in `~/.claude/state/go-robust-enforce/<session_id>.json`.
-- `enforce-go-robust-stop.py` — Stop. When the assistant's last message contains `requires_confirmation` markers (`## 要確認` + severity + `auto_fixable: false`, or the `─────` separator) and `/go-robust` has not yet run for the current review cycle, returns `decision: "block"` with a reason so the runtime forces `/go-robust` to execute.
+- `enforce-go-robust-stop.py` — Stop. When the assistant's last message contains `requires_confirmation` markers (any of: `## 要確認` + severity + `auto_fixable: false`, the `─────` separator, or list-form severity lines like `- [warning] ...` / `1. [critical] ...` produced by `/rfl` aggregation) and `/go-robust` has not yet run for the current review cycle, returns `decision: "block"` with a reason so the runtime forces `/go-robust` to execute.
 
 Escape hatches (for the rare case you explicitly want to skip):
 
 - `--no-go-robust` flag on the review command (one-shot bypass for the current cycle)
 - `/skip-go-robust-once` command issued after the review output (one-shot bypass for the next response)
 
-Safety caps: `stop_hook_active` short-circuits; each cycle is capped at `MAX_ENFORCE = 2` blocks; `bypass_once` is consumed after a single use.
+Safety caps: `stop_hook_active` short-circuits; after `MAX_ENFORCE = 2` automatic blocks in the same cycle the hook keeps blocking with an explicit recovery message (it does **not** silently pass — use the escape hatches above to proceed); `bypass_once` is consumed after a single use.
 
 ---
 
 ## Setup
 
 > **Prerequisite:** The setup commands and `rfl` shell examples require **Git Bash** (Windows) or a POSIX shell (macOS/Linux). PowerShell is not supported.
+
+> **Note (for this repo's maintainers):** The skill files in `skills/` are exposed at `~/.claude/skills/<name>` via Windows junctions (`mklink /J`) so the cloned repo is the single source of truth; editing the repo immediately reflects into the loaded skill. The `cp`-based setup below is for external users installing the skills into their own Claude Code environment.
 
 ```bash
 git clone https://github.com/Tenormusica2024/review-fix-pipeline
@@ -191,7 +193,8 @@ A rising false positive rate is the signal that the model has run out of real is
 
 - [Claude Code](https://claude.ai/code)
 - Python 3.10+
-- Codex CLI (optional, for `--d` mode): `npm install -g @openai/codex`
+- Codex CLI (optional, required for `--d`, `--c`, and `--parallel` modes): `npm install -g @openai/codex`
+- `ZAI_AUTH_TOKEN` env var (optional, required for GLM in `--parallel` mode)
 
 ## License
 
