@@ -107,12 +107,29 @@ def load_state(session_id: str) -> dict:
 
 
 def save_state(session_id: str, state: dict) -> None:
+    """state を原子的に保存する。
+
+    submit hook が書いている途中で stop hook が読むと壊れた JSON を拾って
+    `None` / 初期状態扱いになり /go-robust 強制が抜ける。tmp ファイルに
+    書いてから `os.replace()` で差し替えることで読み手は常に前回の完全な
+    state か今回の完全な state のどちらかしか見ない。
+    """
     path = _state_path(session_id)
     if path is None:
         return
-    path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    tmp_path = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
+    try:
+        tmp_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(tmp_path, path)
+    except Exception:
+        # 書き込み失敗時は tmp を掃除しておく（次回実行を邪魔しないため）
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
 
 
 REVIEW_COMMANDS = frozenset(

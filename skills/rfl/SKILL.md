@@ -7,7 +7,7 @@ allowed-tools: Read, Glob, Grep, Edit, Write, Bash(git *), Bash(python*), Bash(n
 
 ## Mission
 
-**intent-first-reviewベースの高精度レビューをサブエージェントで実行し、Warning以上の問題を自動修正し、クリーンになるまで最大5ループ繰り返す。**
+**intent-first-reviewベースの高精度レビューをサブエージェントで実行し、warning以上の問題を自動修正し、クリーンになるまで最大5ループ繰り返す。**
 
 レビューと修正を別コンテキストに分離することで、「自分が書いた修正を自分でレビューする」忖度バイアスを構造的に排除する。
 
@@ -299,7 +299,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 サブエージェントから返された指摘をseverityで分類し、ユーザーに提示する。
 
 #### 自動修正可（確認なしで修正）
-- `auto_fixable: true` かつ severity が Warning 以上（criticalでもauto_fixable:trueならStep 3で実測確認の上で修正する）
+- `auto_fixable: true` かつ severity が warning 以上（criticalでもauto_fixable:trueならStep 3で実測確認の上で修正する）
 - 表記ゆれ・typo・フォーマット違反
 - コメント・ドキュメントのみの修正（ロジック変更なし）
 - 同一ファイル内で明確に矛盾している記述
@@ -316,7 +316,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 
 **蓄積ルール:**
 - 要確認はループ状態ファイルの `pending_confirmations` に追加し、**ループをブロックしない**。重複排除: `file_path + 行番号(±3行) + タイトル` が既存項目と一致する場合は新規追加せず、`detected_loops` リストにループ番号を追記する
-- ループ判定（Warning以上 = 0件）は `auto_fixable: true` の指摘のみで判定する
+- ループ判定（warning以上 = 0件）は `auto_fixable: true` の指摘のみで判定する
 - **例外: severity が critical かつ auto_fixable が false の要確認はループを中断**し、即座にユーザーに確認する（設計変更を伴う修正を自動で進めるとループ方向がズレるため）。中断時はループ状態ファイルを削除し、`python "$HOME/.claude/scripts/review-feedback.py" close-session --reviewer "review-fix-loop" --reason "critical-interrupt"` を実行してからユーザーに報告する
 - メインコンテキストが誤検知と判断してスキップした指摘は、severityに関わらず `false_positive_counts` を+1する
 - ループ完了後（Step 5 or Step 6）に蓄積した要確認を一括提示する
@@ -344,8 +344,8 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 ```
 
 **遷移条件（明示的分岐）:**
-- `auto_fixable: true` かつ Warning以上 が **> 0件** → 要確認を `pending_confirmations` に蓄積し、**Step 3へ進む**
-- `auto_fixable: true` かつ Warning以上 が **= 0件** → **Step 5（完了）へ直行**（要確認は蓄積済みのため完了時に一括提示）
+- `auto_fixable: true` かつ warning以上 が **> 0件** → 要確認を `pending_confirmations` に蓄積し、**Step 3へ進む**
+- `auto_fixable: true` かつ warning以上 が **= 0件** → **Step 5（完了）へ直行**（要確認は蓄積済みのため完了時に一括提示）
 - **例外:** severity: critical かつ auto_fixable: false の要確認が存在する場合はループを中断し、ユーザーに即確認する（蓄積ルールの例外条件と同一）
 
 ---
@@ -354,7 +354,7 @@ python "$HOME/.claude/scripts/merge_parallel_reviews.py" \
 
 「自動修正可」全件を修正する。要確認はループ状態ファイルに蓄積し、この時点では修正しない。
 
-修正の優先順位: Critical → Warning の順。
+修正の優先順位: critical → warning の順。
 
 **修正ファイルの記録（Step 4の再レビュー対象限定に使用）:**
 Step 3で実際に修正したファイルの一覧を記録し、ループ状態ファイルの `last_modified_files` に保存する。Step 4はこの一覧のみを再レビュー対象とする（`base_rev` からの全差分ではなく、直前ループで触ったファイルに限定）。
@@ -375,7 +375,7 @@ Step 3で実際に修正したファイルの一覧を記録し、ループ状�
 あなたはコードの修正担当です。以下のレビュー指摘に基づいて、対象ファイルを修正してください。
 
 ## 修正対象の指摘一覧
-[Step 2で分類した auto_fixable: true かつ Warning以上の指摘をMarkdownで列挙]
+[Step 2で分類した auto_fixable: true かつ warning以上の指摘をMarkdownで列挙]
 
 ## 対象ファイル
 [指摘対象ファイルのパス一覧]
@@ -419,7 +419,7 @@ fi
 **Codex修正失敗時のフォールバック:**
 Codexがエラー（exit code != 0）またはファイルを一切変更しなかった場合、メインコンテキストが通常モードと同じ方法で修正を実行する。
 
-**Critical指摘の実測確認ルール（必須）:**
+**critical指摘の実測確認ルール（必須）:**
 
 `severity: critical` の指摘は、修正実装前に必ず実測確認を行う。
 
@@ -478,9 +478,9 @@ Step 3で `last_modified_files` に記録されたファイル一覧を再レビ
 
 1. `severity: critical` かつ `auto_fixable: false` が存在 → **ループ中断**。ユーザーに即確認（蓄積ルールの例外と同一）
 2. 全指摘数 = 0件 → **Step 5（完了）へ直行**（クリーン状態）
-3. 自動修正可（`auto_fixable: true` かつ Warning以上）= 0件 → **Step 5（完了）へ**（要確認は蓄積済み、完了時に一括提示）
-4. 誤検知率 > 50%（= 誤検知数 / 全指摘数 > 0.5）かつ 残存の自動修正可（Warning以上）= 0件 → **Step 5（完了）へ**（残存指摘は「誤検知の可能性が高い」として報告）
-   ※ 残存の自動修正可（Warning以上）> 0件の場合は誤検知率に関わらずループ継続
+3. 自動修正可（`auto_fixable: true` かつ warning以上）= 0件 → **Step 5（完了）へ**（要確認は蓄積済み、完了時に一括提示）
+4. 誤検知率 > 50%（= 誤検知数 / 全指摘数 > 0.5）かつ 残存の自動修正可（warning以上）= 0件 → **Step 5（完了）へ**（残存指摘は「誤検知の可能性が高い」として報告）
+   ※ 残存の自動修正可（warning以上）> 0件の場合は誤検知率に関わらずループ継続
 5. 自動修正可 > 0件 かつ ループ回数 < 5 → **Step 2へ戻る**
 6. 自動修正可 > 0件 かつ ループ回数 = 5 → **Step 6（ループ上限到達）へ**
 
@@ -499,8 +499,9 @@ python -c "import pathlib; pathlib.Path.home().joinpath('.claude/review-loop-sta
 ```
 
 **git管理下の場合（`base_rev` が null でない）:**
-ステージング・commit・push・PR 作成は `/commit` に委譲する。
-ユーザーへの確認なしに、Claude 自身が続けて `/commit` を実行する。
+`rfl` 自身は commit/push を行わない。Step 5 終了後に自動実行される `/go-robust` に
+ステージング・commit・push・PR 作成を委譲する（責務を一本化することで、
+hook やプロンプト指示の漏れによる commit 抜けを構造的に防ぐ）。
 
 **git管理外の場合（`base_rev` が null。`.claude/commands/*.md`・`.claude/skills/*.md` 等）:**
 commit & push なし。
@@ -521,7 +522,7 @@ python "$HOME/.claude/scripts/review-feedback.py" close-session \
 ```
 
 **1セッション1回だけ close する。** `completed` と `no-findings` は排他的分岐であり、両方実行することはない。
-**判定基準:** セッション累積で Warning 以上を 1 件でも処理した場合、または `pending_confirmations` が空でない場合は、最終ループが 0 件でも `record` + `completed` を使う。`no-findings` は「セッション全体を通じて一切の指摘がなかった」場合にのみ使用する。
+**判定基準:** セッション累積で warning 以上を 1 件でも処理した場合、または `pending_confirmations` が空でない場合は、最終ループが 0 件でも `record` + `completed` を使う。`no-findings` は「セッション全体を通じて一切の指摘がなかった」場合にのみ使用する。
 **pending_confirmationsのみの場合の `--findings` 内容:** 自動修正 findings が 0 件で confirmations のみ蓄積された場合、`--findings` には confirmations を findings として変換して記録する（`severity` はそのまま、`summary` に「要確認: 」プレフィックス付与）。空配列での record は統計上「0件処理」となり実態と乖離するため禁止。
 
 完了報告:
@@ -575,10 +576,10 @@ python "$HOME/.claude/scripts/review-feedback.py" close-session \
 
 以下の問題が残存しています。手動での判断が必要です:
 
-### 残存 Critical
+### 残存 critical
 - [問題] @ [ファイル名:行番号]
 
-### 残存 Warning
+### 残存 warning
 - [問題] @ [ファイル名:行番号]
 
 commitは行っていません（/go-robust が処理可能な修正を実行後、自動でコミット・プッシュします）。
@@ -603,11 +604,11 @@ commitは行っていません（/go-robust が処理可能な修正を実行後
 - **レビューは必ずサブエージェントで実行する**: 同一コンテキストでの自己レビューは禁止。これがiterative-fixとの最大の差別化ポイント
 - **毎ループで新しいサブエージェントを起動する**: 前回のコンテキストを引き継がないことで忖度を構造的に排除
 - **サブエージェントにはプロジェクトコンテキストを十分に渡す**: `skills/ifr/SKILL.md`（レビュールール）だけでなく、設計意図・CLAUDE.md・プロジェクト概要を含める。ここが雑だと「一般論」ベースのレビューになる
-- **Critical指摘は必ず実測確認してから修正する**: サブエージェントの主張をBash/python -cで検証し、誤検知なら修正しない
+- **critical指摘は必ず実測確認してから修正する**: サブエージェントの主張をBash/python -cで検証し、誤検知なら修正しない
 - **誤検知率 > 50% は早期終了**: 本物の問題が底をついたサインであり、追加ループは精度を下げるだけになる
 - **ループ状態ファイルで中断耐性を確保**: compact 後の resume でもループ番号・対象ファイルを復元して継続できる
 - **要確認は蓄積してループ完了後に一括提示**: ループをブロックしない。ただし severity: critical かつ auto_fixable: false の場合のみ即中断してユーザーに確認する。堅牢方向の自動選択ルール・自律修正原則に該当する場合は自動修正してよい（詳細は `skills/ifr/SKILL.md` 参照）
-- **Info以下はループ対象外**: Warning以上のみをループ判定に使用
+- **Info以下はループ対象外**: warning以上のみをループ判定に使用
 - **commitは最後の1回だけ**: 途中ループでのcommitは禁止（差分が追えなくなるため）
 - **メインコンテキストは修正の妥当性を判断する権限を持つ**: サブエージェントの指摘が誤検知の場合、修正せずにスキップしてよい（理由をユーザーに報告する）。`--d` / `--c` 時はCodexが修正を実行するが、メインコンテキストが差分を確認し、明らかに誤った修正はrevertする
 - **速度より精度を優先**: サブエージェント起動コストを惜しまない。高精度なレビューのためのトレードオフ

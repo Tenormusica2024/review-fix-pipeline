@@ -1,0 +1,32 @@
+# Single Source of Truth for Python formatting/linting in this repo.
+# Rationale: 複数人 / fresh session AI がフォーマッタをかけても同じ結果になるよう、
+# ruff の設定をここで固定する。settings が無いと全ファイル diff が発生しうる。
+
+[tool.ruff]
+# hooks/ と scripts/ は Python 3.10+ の `|` 型ヒントや型注釈を前提としているため
+# それに合わせる（既存コードの書き換えを避ける最小設定）。
+target-version = "py310"
+line-length = 100
+
+# 対象ディレクトリ
+src = ["hooks", "scripts"]
+
+[tool.ruff.lint]
+# 最小限のルールセット:
+#   E, F = pycodestyle / pyflakes（構文・未使用import 等の基本チェック）
+#   I    = isort（import 順の統一）
+#   UP   = pyupgrade（古い書き方の検出）
+#   B    = bugbear（よくあるバグパターン）
+select = ["E", "F", "I", "UP", "B"]
+
+# hooks は Claude Code から呼ばれる外部プロセスで、stderr/stdout を直接制御する都合上
+# print による I/O と broad-except が正当。E501（長い行）は既存文章の都合で一部超える。
+ignore = [
+  "E501",  # line-too-long (既存の日本語コメント・URL 等で長くなる箇所を許容)
+  "B904",  # raise-from (既存コードでは raise ... from exc を強制しない)
+]
+
+[tool.ruff.format]
+# Black 互換のデフォルトを採用（ダブルクォート・4スペース・trailing comma あり）
+quote-style = "double"
+indent-style = "space"

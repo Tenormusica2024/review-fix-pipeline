@@ -83,7 +83,12 @@ def extract_markdown_review_block(raw_output: str) -> str:
 
 
 def has_structured_review_markers(text: str) -> bool:
-    """Structured review の痕跡があるか判定する"""
+    """Structured review の痕跡があるか判定する。
+
+    README で英語例 (`Issue:` / `Detail:` / `Decision point:` など) を公開している以上、
+    英語キーも Step 4 フォーマットの痕跡として認識する。日本語キーだけを見ていると
+    英語例に従ったレビュー出力が要確認として判定されず、マージで欠落する。
+    """
     markers = [
         r'severity\s*[:：]\s*(critical|warning|info)',
         r'auto_fixable\s*[:：]\s*(true|false)',
@@ -92,6 +97,13 @@ def has_structured_review_markers(text: str) -> bool:
         r'何が起きるか\s*[:：]',
         r'なぜ起きるか\s*[:：]',
         r'変更内容\s*[:：]',
+        # 英語キー
+        r'Issue\s*[:：]',
+        r'Decision\s+point\s*[:：]',
+        r'Detail\s*[:：]',
+        r'What\s+happens\s*[:：]',
+        r'Why\s*[:：]',
+        r'Fix\s*[:：]',
         r'\[(critical|warning|info)\]',
     ]
     return any(re.search(pattern, text, re.IGNORECASE) for pattern in markers)
@@ -235,12 +247,19 @@ def _parse_confirmation_item(text: str, model: str) -> dict | None:
     if not has_structured_review_markers(text):
         return None
 
-    # タイトル抽出: "問題:" フィールドまたは最初の行
-    title_match = re.search(r'問題\s*[:：]\s*(.+)', text)
+    # タイトル抽出: "問題:" / "Issue:" フィールド、または最初の行
+    # README で英語例 (`Issue:` / `Decision point:`) を公開している以上、
+    # 英語キーも日本語キーと同等に解釈する。どちらか片方しか見ないとマージ結果の
+    # タイトルが `severity: warning` のような誤った値に化ける。
+    title_match = re.search(r'(?:問題|Issue)\s*[:：]\s*(.+)', text, re.IGNORECASE)
     title = title_match.group(1).strip() if title_match else text.split('\n', 1)[0].strip()
 
-    # 判断ポイント抽出
-    judgment_match = re.search(r'判断ポイント\s*[:：]\s*(.+?)(?:\n|$)', text)
+    # 判断ポイント抽出（英語キー `Decision point:` も許容）
+    judgment_match = re.search(
+        r'(?:判断ポイント|Decision\s+point)\s*[:：]\s*(.+?)(?:\n|$)',
+        text,
+        re.IGNORECASE,
+    )
     judgment = judgment_match.group(1).strip() if judgment_match else ""
 
     file_path, line_num = parse_file_path_line(text)

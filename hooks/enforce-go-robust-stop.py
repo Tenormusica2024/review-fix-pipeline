@@ -47,8 +47,13 @@ MAX_ENFORCE = 2
 # 要確認セクションの検出マーカー（IFR Step 4 フォーマット準拠）
 # 公開 README に英語例 (## Requires confirmation) を載せている以上、日本語と英語の両方を受理する。
 # どちらか片方だけだと README 例に従ったレビュー出力を Stop hook が検知できず /go-robust が発火しない。
+# また rfl は `## 要確認（ループ中に蓄積された項目）` や `### 要確認（Y件）` のような件数付き・
+# 補足付きヘッダーも使う。そのため以下を全て受理する:
+#   - `## 要確認` / `## Requires confirmation`（ベース）
+#   - `### 要確認` / `### Requires confirmation`（rfl 集約出力）
+#   - `## 要確認（N件）` `## Requires confirmation (details)` 等の括弧補足付き
 MARKER_HEADER = re.compile(
-    r"^\s*##\s*(?:要確認|Requires\s+confirmation)\s*$",
+    r"^\s*#{2,4}\s*(?:要確認|Requires\s+confirmation)(?:\s*[（(][^)）\n]*[)）])?\s*$",
     re.MULTILINE | re.IGNORECASE,
 )
 MARKER_SEVERITY = re.compile(
@@ -85,26 +90,49 @@ def _state_path(session_id: str) -> Path | None:
     return path
 
 
+class StateCorrupted(Exception):
+    """state ファイルは存在するが読めなかった（JSON 破損等）ことを示す。
+
+    fail-closed 設計: submit hook が書いた直後に stop hook が読むレース等で
+    壊れた JSON を拾った場合、silently pass すると enforcement guarantee が
+    失われる。検知可能な例外として伝搬させ、main() でブロックに倒す。
+    """
+
+
 def load_state(session_id: str) -> dict | None:
     path = _state_path(session_id)
     if path is None or not path.exists():
         return None
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
         sys.stderr.write(
-            f"[enforce-go-robust-stop] state file corrupted: {path}\n"
+            f"[enforce-go-robust-stop] state file corrupted: {path}: {exc}\n"
         )
-        return None
+        raise StateCorrupted(str(path)) from exc
 
 
 def save_state(session_id: str, state: dict) -> None:
+    """state を原子的に保存する（submit hook と同じロジック）。
+
+    submit hook が書いている途中で stop hook が読むと壊れた JSON を拾って
+    enforcement が抜けるため、tmp → os.replace() 方式に揃える。
+    """
     path = _state_path(session_id)
     if path is None:
         return
-    path.write_text(
-        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    tmp_path = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
+    try:
+        tmp_path.write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
 
 
 def has_pending_markers(text: str) -> bool:
@@ -156,7 +184,26 @@ def main() -> int:
     if not session_id:
         return 0
 
-    state = load_state(session_id)
+    try:
+        state = load_state(session_id)
+    except StateCorrupted as exc:
+        # fail-closed: state 破損は silently pass せず、
+        # enforcement guarantee が失われたことを明示してブロックする。
+        # ユーザーに復旧導線（state 削除 or /skip-go-robust-once）を提示する。
+        reason = (
+            "[enforce-go-robust-stop] enforcement guarantee was lost: "
+            f"session state は存在しますが JSON が破損しています ({exc}).\n"
+            "レビュー後の /go-robust 未実行を検知できない状態になっているため、"
+            "安全側に倒してブロックします。\n\n"
+            "復旧方法:\n"
+            "  1. `/go-robust` を手動実行してから再度返答する\n"
+            "  2. どうしても今回だけスキップする場合は `/skip-go-robust-once` を実行する\n"
+            "  3. state 自体が恒久的に壊れている場合は該当 state ファイルを削除する"
+        )
+        output = {"decision": "block", "reason": reason}
+        print(json.dumps(output))
+        return 0
+
     if state is None:
         # state なし = レビューコマンド未実行、何もしない
         return 0
