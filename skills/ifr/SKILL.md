@@ -25,9 +25,8 @@ version: 0.3.0
 - 「意見がほしいけど全否定されたくない」というシチュエーション
 
 NG例（他のスキルを使う場面）:
-- コードのバグ検出のみ（修正不要） → `/brutal-review` or `/code-review`
+- コードのバグ検出のみ（修正不要） → `/code-review`
 - バグ検出＋自動修正ループ → `/iterative-fix` or `/rfl`
-- コード品質の数値評価が必要 → `/brutal-review`
 
 ## 実行モード
 
@@ -292,7 +291,7 @@ Stop hook (`enforce-go-robust-stop.py`) がレビュー出力内の要確認マ�
 **脱出口（どうしても /go-robust をスキップしたい場合）:**
 
 - **`--no-go-robust` フラグ**: レビューコマンド実行時にフラグを付ける。
-  例: `/ifr --no-go-robust` / `/rfl --no-go-robust` / `/brutal-review --no-go-robust`
+  例: `/ifr --no-go-robust` / `/rfl --no-go-robust`
   → そのサイクル1回限り hook をバイパス。
 - **`/skip-go-robust-once` コマンド**: レビュー後・次応答の直前に単発で実行する。
   → 次の1応答だけ hook をバイパス（one-shot）。

@@ -1,7 +1,7 @@
 """
 enforce-go-robust-submit.py
 
-UserPromptSubmit hook: /ifr, /rfl, /brutal-review の開始と /go-robust の実行、
+UserPromptSubmit hook: /ifr, /rfl の開始と /go-robust の実行、
 および脱出口（--no-go-robust フラグ / /skip-go-robust-once コマンド）を
 セッション単位で追跡する。
 
@@ -12,7 +12,7 @@ Stop hook (enforce-go-robust-stop.py) が読み取って要確認未処理時に
 state schema:
 {
   "session_id": "...",
-  "last_review_command": {"name": "ifr"|"rfl"|"brutal-review", "ts": "ISO"} | null,
+  "last_review_command": {"name": "ifr"|"rfl", "ts": "ISO"} | null,
   "last_go_robust": "ISO" | null,
   "bypass_once": bool,
   "enforced_count": int  // 同一サイクル内で block した回数
@@ -45,7 +45,7 @@ SAFE_SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 # MULTILINE 検索だと本文中の引用・例示にも反応して state 遷移が誤発火するため、
 # 「この応答でユーザーが実際にコマンドを発行した」ことを示す先頭行に限定する。
 FIRST_LINE_CMD_PATTERN = re.compile(
-    r"^\s*/(ifr|rfl|brutal-review|intent-first-review|review-fix-loop|go-robust|skip-go-robust-once)\b(.*)$",
+    r"^\s*/(ifr|rfl|intent-first-review|review-fix-loop|go-robust|skip-go-robust-once)\b(.*)$",
     re.IGNORECASE,
 )
 
@@ -116,7 +116,7 @@ def save_state(session_id: str, state: dict) -> None:
 
 
 REVIEW_COMMANDS = frozenset(
-    {"ifr", "rfl", "brutal-review", "intent-first-review", "review-fix-loop"}
+    {"ifr", "rfl", "intent-first-review", "review-fix-loop"}
 )
 
 

@@ -1,7 +1,7 @@
 """
 enforce-go-robust-stop.py
 
-Stop hook: /ifr, /rfl, /brutal-review が出した「要確認」を
+Stop hook: /ifr, /rfl が出した「要確認」を
 /go-robust が処理する前にユーザーに返すのを防ぐ。
 
 検知ロジック（structured state 主導・marker scoring は補助）:

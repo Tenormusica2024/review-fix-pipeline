@@ -110,7 +110,7 @@ Runs automatically after `/ifr` and `/rfl` finish. Items that still require huma
 
 To guarantee `/go-robust` runs before review output is returned to the user, install the two hooks in `hooks/`:
 
-- `enforce-go-robust-submit.py` — UserPromptSubmit. Tracks when `/ifr`, `/rfl`, `/brutal-review`, or `/go-robust` is invoked and records the session state in `~/.claude/state/go-robust-enforce/<session_id>.json`.
+- `enforce-go-robust-submit.py` — UserPromptSubmit. Tracks when `/ifr`, `/rfl`, or `/go-robust` is invoked and records the session state in `~/.claude/state/go-robust-enforce/<session_id>.json`.
 - `enforce-go-robust-stop.py` — Stop. When the assistant's last message contains `requires_confirmation` markers (`## 要確認` + severity + `auto_fixable: false`, or the `─────` separator) and `/go-robust` has not yet run for the current review cycle, returns `decision: "block"` with a reason so the runtime forces `/go-robust` to execute.
 
 Escape hatches (for the rare case you explicitly want to skip):
