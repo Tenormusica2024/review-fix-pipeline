@@ -1,5 +1,6 @@
 .letta/
 __pycache__/
 *.pyc
+.pytest_cache/
 CLAUDE.md
 .claude/

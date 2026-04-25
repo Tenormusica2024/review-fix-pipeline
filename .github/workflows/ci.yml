@@ -24,9 +24,9 @@ jobs:
 
       - name: Syntax check (py_compile)
         run: |
-          python -m compileall -q hooks/ scripts/
+          python -m compileall -q hooks/ scripts/ tests/
 
-      - name: Install Ruff
+      - name: Install tooling
         # pyproject.toml の [tool.ruff] を fmt/lint の Single Source of Truth として
         # CI で強制するため、SSoT 宣言だけで終わらせず実ゲートにする。
         # バージョン固定の根拠: ruff は minor bump でも lint/format 出力が変わりうる。
@@ -34,7 +34,7 @@ jobs:
         # 更新は意図的に pyproject.toml とセットで bump する運用。
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "ruff==0.15.11"
+          python -m pip install "ruff==0.15.11" "pytest==8.4.2"
 
       - name: Ruff lint (pyproject.toml SSoT)
         run: |
@@ -55,6 +55,10 @@ jobs:
       - name: Smoke test — review-feedback.py summary (empty DB)
         run: |
           python scripts/review-feedback.py summary > /dev/null
+
+      - name: Unit tests
+        run: |
+          python -m pytest -q
 
       - name: Smoke test — hooks importable
         run: |
