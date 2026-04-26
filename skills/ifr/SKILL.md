@@ -237,9 +237,61 @@ auto_fixable: false
 [意図が上手く実現できている部分があれば一言]
 ```
 
+### Step 4.5: machine-readable block 併記方針
+
+可能なら、上の人間向けMarkdownに加えて **JSON fenced block** を併記する。
+block 名は次を優先:
+
+```text
+```review-outcome-json
+[ ...items... ]
+```
+```
+
+items は `scripts/review_outcome_contract.py` / `scripts/review_output_bridge.py`
+が読める shape に合わせる。
+
+最低限ほしい項目:
+- `type`
+- `title`
+- `summary`
+- `severity`
+- `file_path`
+- `line`
+- `status`
+- `auto_fixable`
+- `needs_judgment`
+- `confidence`
+
+補足:
+- machine block を出せる場合は、それを PDCA 連携の正本として扱う
+- machine block が難しい場合でも、上記 Step 4 の markdown は
+  `scripts/review_output_bridge.py` が parse できる shape を保つ
+- 特に `## 自動修正可` / `## 要確認` / `severity:` / `対象:` / `判断ポイント:`
+  の見出し・キー名は崩さない
+
 ### Step 5: 自動修正ループ（レビュー後に必ず実行 — `mode: "review-only"` 時はスキップ）
 
 **`mode: "review-only"` が指定されている場合、Step 5・Step 6は実行しない。** レビュー結果を返して終了する。
+
+`mode: "review-only"` で終了する場合でも、環境が許せば review 結果を
+temp markdown に保存し、次の bridge で PDCA へ流してよい:
+
+```bash
+python scripts/review_output_bridge.py \
+  --input-file "$REVIEW_OUTPUT_FILE" \
+  --reviewer intent-first-review \
+  --runtime claude-code \
+  --mode review-only \
+  --forward-to-pdca
+```
+
+補足:
+- sibling repo 構成なら `--forward-to-pdca` だけで
+  `../claude-review-pdca/scripts/record-review-outcome.py` を自動解決する
+- 必要に応じて `--pdca-root` / `--producer-path` / `PDCA_PRODUCER_PATH` を使う
+- auto-fix ループを回していない単発レビューでは、legacy markdown 由来の
+  `自動修正可` 項目は既定で `pending` 扱いになる
 
 レビュー出力が完了したら、**ユーザーに確認せず**即座に以下のループを実行する。
 

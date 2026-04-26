@@ -596,6 +596,34 @@ python "$HOME/.claude/scripts/review-feedback.py" close-session \
   --reviewer "review-fix-loop" --reason "limit-reached"
 ```
 
+### PDCA outcome bridge（完了時の任意連携）
+
+review markdown 全文を temp file に保存できる環境では、完了時に
+`scripts/review_output_bridge.py` を呼んで `claude-review-pdca` へ流してよい。
+
+推奨:
+- loop 完了後に生成した最終レビュー markdown を `"$SESSION_TMPDIR"/final-review.md`
+  のようなファイルに保存
+- safe fix を実施済みの `/rfl` 完了時は `--auto-fix-status fixed` を付ける
+
+例:
+```bash
+python scripts/review_output_bridge.py \
+  --input-file "$SESSION_TMPDIR"/final-review.md \
+  --reviewer review-fix-loop \
+  --runtime claude-code \
+  --forward-to-pdca \
+  --classify-patterns \
+  --auto-fix-status fixed
+```
+
+補足:
+- machine-readable block が markdown に含まれていれば、それを優先して読む
+- machine block がない場合でも、現行の `## 自動修正可` / `## 要確認`
+  markdown は bridge が parse できる shape を保つ
+- sibling repo 構成なら `--forward-to-pdca` のみで downstream producer を
+  自動解決できる
+
 ```
 ## ループ上限到達（5回）
 
