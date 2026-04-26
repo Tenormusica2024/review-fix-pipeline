@@ -27,6 +27,9 @@ REVIEWER_ALIASES = {
     "sc-rfl": "review-fix-loop",
     "sc-review-fix-loop": "review-fix-loop",
     "review-fix-loop": "review-fix-loop",
+    "sc-gr": "go-robust",
+    "/go-robust": "go-robust",
+    "go-robust": "go-robust",
     "sc-ir": "intent-review-light",
     "intent-review-light": "intent-review-light",
 }

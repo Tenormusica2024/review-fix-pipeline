@@ -72,6 +72,7 @@ python scripts/review_outcome_contract.py \
 1. 人間向け markdown を出す
 2. 可能なら `review-outcome-json` fenced block も併記
 3. review-only で終わる場合は `review_output_bridge.py` で PDCA へ流す
+4. ただし **`/ifr` の pending はデフォルトで feedback 側を主に使い、pattern 学習は急がない**
 
 ### `/rfl` 完了
 
@@ -79,6 +80,23 @@ python scripts/review_outcome_contract.py \
 2. 同じ findings JSON を `review_feedback_bridge.py` にも渡す
 3. `--status fixed` を付ける
 4. pattern 学習もしたいので `--classify-patterns` を付ける
+
+### `sc-gr` / `/go-robust`
+
+1. `/ifr` や `/rfl` で残った要確認を `sc-gr` / `/go-robust` が処理する
+2. **実際にコード修正まで行った resolved item だけ** を PDCA に流す
+3. reviewer は `sc-gr` または `go-robust` としてよい（downstream で `go-robust` に正規化される）
+4. unresolved のまま残った judgment item は pattern 学習しない
+
+例:
+
+```bash
+python scripts/review_outcome_contract.py \
+  --items-file /tmp/go-robust-items.json \
+  --reviewer sc-gr \
+  --runtime codex \
+  --forward-to-pdca
+```
 
 ---
 
@@ -116,6 +134,7 @@ python scripts/review_feedback_bridge.py \
 python scripts/review_output_bridge.py \
   --input-file /tmp/review-output.md \
   --reviewer sc-ifr \
+  --repo-root C:/path/to/actual-target-repo \
   --forward-to-pdca
 ```
 
@@ -129,5 +148,7 @@ python scripts/review_output_bridge.py \
 
 - `/rfl` は **structured findings bridge 優先**
 - `/ifr review-only` は **markdown bridge** が自然
+- `sc-gr` / `/go-robust` は **fixed になった resolved item のみ pattern 学習**するのが自然
+- **対象 repo が `review-fix-pipeline` 自身でない場合は `--repo-root` か `--cwd` を必ず明示**する
 - machine-readable block が安定したら、markdown parser 依存を徐々に減らしてよい
 - false positive 学習は引き続き HITL を維持する

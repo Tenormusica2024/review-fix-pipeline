@@ -26,6 +26,7 @@ class TestReviewOutcomeContract:
     def test_normalize_reviewer_aliases(self):
         assert contract_mod.normalize_reviewer("/ifr") == "intent-first-review"
         assert contract_mod.normalize_reviewer("sc-rfl") == "review-fix-loop"
+        assert contract_mod.normalize_reviewer("sc-gr") == "go-robust"
         assert contract_mod.normalize_reviewer("sc-ir") == "intent-review-light"
 
     def test_normalize_item_makes_repo_relative_path(self):

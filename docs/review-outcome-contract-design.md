@@ -87,6 +87,8 @@ Claude Code と Codex は runtime が違うが、review result の意味は同�
 | `sc-ifr` | `intent-first-review` |
 | `/rfl` | `review-fix-loop` |
 | `sc-rfl` | `review-fix-loop` |
+| `/go-robust` | `go-robust` |
+| `sc-gr` | `go-robust` |
 | `sc-ir` | `intent-review-light` |
 
 補足:
@@ -159,6 +161,13 @@ Claude Code と Codex は runtime が違うが、review result の意味は同�
 期待:
 - contract は同じ
 - ただし downstream (`claude-review-pdca`) で stricter 保存ルールを適用
+
+## `sc-gr` / `/go-robust`
+
+- `/ifr` や `/rfl` で残った要確認を policy ベースで解消する段階
+- **実際に fixed になった item** は PDCA と連動させる価値がある
+- ただし unresolved judgment item まで pattern 学習するとノイズ化しやすい
+- downstream では `go-robust` を **fixed pattern source** として扱うのが自然
 
 ---
 
