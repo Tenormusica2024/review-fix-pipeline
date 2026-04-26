@@ -203,6 +203,9 @@ Claude Code と Codex は runtime が違うが、review result の意味は同�
   既存の markdown 出力を壊さずに共通 payload 化できる
 - machine-readable block が埋め込まれている場合はそれを優先
 - ない場合は legacy markdown (`## 自動修正可` / `## 要確認`) を parse して payload 化する
+- `/rfl` の既存 structured findings をそのまま使える場合は
+  `scripts/review_feedback_bridge.py` を優先してよい
+  （markdown 再解析よりノイズが少ない）
 
 ---
 
