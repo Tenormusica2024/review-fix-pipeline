@@ -20,6 +20,8 @@ Claude Code skills for **intent-first code review** and **automated fix loops** 
 /go-robust
 ```
 
+PDCA 連携の実運用例は `docs/pdca-bridge-runbook.md` を参照。
+
 ---
 
 ## The Problem
