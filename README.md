@@ -24,6 +24,7 @@ Claude Code skills for **intent-first code review** and **automated fix loops** 
 ```
 
 PDCA 連携の実運用例は `docs/pdca-bridge-runbook.md` を参照。
+fork / clone 後の最短導線は `docs/quickstart-from-fork.md` を参照。
 共通入口として `scripts/pdca_bridge_runner.py` も使える。
 
 ---

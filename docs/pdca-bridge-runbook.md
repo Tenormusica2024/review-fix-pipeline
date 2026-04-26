@@ -9,6 +9,8 @@
   - `C:\Users\Tenormusica\claude-review-pdca`
 - もしくは `CLAUDE_REVIEW_PDCA_ROOT` / `PDCA_PRODUCER_PATH` を設定済み
 
+fork / clone 直後の最短導線は `docs/quickstart-from-fork.md` を参照。
+
 ---
 
 ## 最短入口
