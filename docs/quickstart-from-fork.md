@@ -54,6 +54,19 @@ $env:CLAUDE_REVIEW_PDCA_ROOT = "C:\path\to\claude-review-pdca"
 cd C:\path\to\review-fix-pipeline
 ```
 
+### 1.5 対象 repo を 1 つ決める
+
+この quickstart では、bridge 元 repo とは別に
+
+```text
+C:\path\to\sample-target-repo
+```
+
+のような **actual target repo** がある前提で進める。
+
+`review-fix-pipeline` 自身を target repo にしても動作確認はできるが、
+本来の使い方は **別repoへの review memory / PDCA 連携**。
+
 ### 2. 最小の review markdown を用意
 
 例:
@@ -75,7 +88,7 @@ python scripts/pdca_bridge_runner.py `
   --reviewer sc-ifr `
   --runtime codex `
   --mode review-only `
-  --repo-root C:/path/to/review-fix-pipeline `
+  --repo-root C:/path/to/sample-target-repo `
   --forward-to-pdca
 ```
 
@@ -93,6 +106,7 @@ or
 cross-repo forward 時にもっとも壊れやすい。
 
 **必ず actual target repo を `--repo-root` で明示**する。
+bridge を実行している repo (`review-fix-pipeline`) 自身を何となく入れないこと。
 
 ### 2. sibling repo ではない
 
