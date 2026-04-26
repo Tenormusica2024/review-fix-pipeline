@@ -51,6 +51,11 @@ CANONICAL_FIELD_KEYS = {
     "target": "Target",
 }
 
+PATH_HINT_RE = re.compile(
+    r"(?P<path>(?:[A-Za-z]:/)?(?:\.github/[\w./-]+|docs/[\w./-]+|rules/[\w./-]+|hooks/[\w./-]+|scripts/[\w./-]+|tests/[\w./-]+|[\w./-]+\.(?:md|py|ps1|json|yml|yaml|js|ts|tsx|jsx)))",
+    re.IGNORECASE,
+)
+
 
 def load_text(input_text: str | None, input_file: str | None) -> str:
     if input_text is not None:
@@ -87,6 +92,38 @@ def _collect_fields(block: str) -> dict[str, str]:
     return fields
 
 
+def _infer_file_path(
+    *texts: str | None,
+    target_files: list[str] | None = None,
+) -> tuple[str | None, int | None]:
+    normalized_targets = [normalize_path(path) for path in (target_files or []) if normalize_path(path)]
+    joined = "\n".join(str(text or "") for text in texts if text)
+
+    for match in PATH_HINT_RE.finditer(joined):
+        candidate_raw = match.group("path").rstrip(".,)")
+        candidate_path, candidate_line = _split_path_line(candidate_raw)
+        if not candidate_path:
+            continue
+
+        if normalized_targets:
+            candidate_lower = candidate_path.lower()
+            for target in normalized_targets:
+                target_lower = target.lower()
+                if (
+                    candidate_lower == target_lower
+                    or candidate_lower.endswith("/" + target_lower)
+                    or target_lower.endswith("/" + candidate_lower)
+                    or candidate_lower == Path(target_lower).name
+                ):
+                    return target, candidate_line
+        else:
+            return candidate_path, candidate_line
+
+    if len(normalized_targets) == 1:
+        return normalized_targets[0], None
+    return None, None
+
+
 def extract_machine_block(markdown: str) -> list[dict] | None:
     for match in FENCE_RE.finditer(markdown):
         body = match.group(1).strip()
@@ -103,7 +140,7 @@ def extract_machine_block(markdown: str) -> list[dict] | None:
     return None
 
 
-def _parse_auto_fixable_block(block: str, default_status: str) -> list[dict]:
+def _parse_auto_fixable_block(block: str, default_status: str, *, target_files: list[str] | None = None) -> list[dict]:
     items: list[dict] = []
     titles = list(TITLE_RE.finditer(block))
     for index, title_match in enumerate(titles):
@@ -112,6 +149,14 @@ def _parse_auto_fixable_block(block: str, default_status: str) -> list[dict]:
         body = block[start:end]
         fields = _collect_fields(body)
         file_path, line = _split_path_line(fields.get("対象") or fields.get("Target"))
+        if not file_path:
+            file_path, line = _infer_file_path(
+                title_match.group("title"),
+                fields.get("何が起きるか"),
+                fields.get("What happens"),
+                body,
+                target_files=target_files,
+            )
         summary = fields.get("何が起きるか") or fields.get("What happens") or title_match.group("title").strip()
         items.append(
             {
@@ -131,7 +176,7 @@ def _parse_auto_fixable_block(block: str, default_status: str) -> list[dict]:
     return items
 
 
-def _parse_judgment_block(block: str) -> list[dict]:
+def _parse_judgment_block(block: str, *, target_files: list[str] | None = None) -> list[dict]:
     items: list[dict] = []
     chunks = [chunk.strip() for chunk in SEPARATOR_RE.split(block) if chunk.strip()]
     for chunk in chunks:
@@ -139,6 +184,15 @@ def _parse_judgment_block(block: str) -> list[dict]:
         title = fields.get("問題") or fields.get("Issue") or "judgment required"
         summary = fields.get("詳細") or fields.get("Detail") or title
         file_path, line = _split_path_line(fields.get("対象") or fields.get("Target"))
+        if not file_path:
+            file_path, line = _infer_file_path(
+                title,
+                summary,
+                fields.get("判断ポイント"),
+                fields.get("Decision point"),
+                chunk,
+                target_files=target_files,
+            )
         items.append(
             {
                 "type": "judgment_call" if fields.get("判断ポイント") or fields.get("Decision point") else "finding",
@@ -157,7 +211,7 @@ def _parse_judgment_block(block: str) -> list[dict]:
     return items
 
 
-def parse_legacy_markdown(markdown: str, *, auto_fix_status: str = "pending") -> list[dict]:
+def parse_legacy_markdown(markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None) -> list[dict]:
     items: list[dict] = []
     sections = list(SECTION_RE.finditer(markdown))
     for index, section_match in enumerate(sections):
@@ -166,17 +220,17 @@ def parse_legacy_markdown(markdown: str, *, auto_fix_status: str = "pending") ->
         end = sections[index + 1].start() if index + 1 < len(sections) else len(markdown)
         body = markdown[start:end]
         if section_name in {"自動修正可", "auto-fixable"}:
-            items.extend(_parse_auto_fixable_block(body, auto_fix_status))
+            items.extend(_parse_auto_fixable_block(body, auto_fix_status, target_files=target_files))
         elif section_name in {"要確認", "requires confirmation"}:
-            items.extend(_parse_judgment_block(body))
+            items.extend(_parse_judgment_block(body, target_files=target_files))
     return items
 
 
-def parse_review_output(markdown: str, *, auto_fix_status: str = "pending") -> list[dict]:
+def parse_review_output(markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None) -> list[dict]:
     machine_items = extract_machine_block(markdown)
     if machine_items is not None:
         return machine_items
-    return parse_legacy_markdown(markdown, auto_fix_status=auto_fix_status)
+    return parse_legacy_markdown(markdown, auto_fix_status=auto_fix_status, target_files=target_files)
 
 
 def main() -> int:
@@ -207,7 +261,7 @@ def main() -> int:
 
     try:
         markdown = load_text(args.input_text, args.input_file)
-        items = parse_review_output(markdown, auto_fix_status=args.auto_fix_status)
+        items = parse_review_output(markdown, auto_fix_status=args.auto_fix_status, target_files=args.target_file)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

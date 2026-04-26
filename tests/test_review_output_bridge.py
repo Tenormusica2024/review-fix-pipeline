@@ -105,6 +105,42 @@ severity: warning
         assert items[1]["file_path"] == "src/worker.py"
         assert items[1]["line"] == 121
 
+    def test_parse_legacy_markdown_infers_path_from_text_and_target_files(self):
+        markdown = """
+## Auto-fixable
+### install explanation should match install.ps1 behavior
+- Severity: warning
+- What happens: fresh fork users can misread README and think install.ps1 ships complete test skills
+
+## Requires confirmation
+- Severity: warning
+- Issue: quickstart dispatch expectation is still ambiguous
+- Detail: docs/quickstart-from-fork.md should say hook block is immediate but full dispatch depends on SKILL.md placement
+"""
+        items = bridge_mod.parse_review_output(
+            markdown,
+            auto_fix_status="pending",
+            target_files=["README.md", "install.ps1", "docs/quickstart-from-fork.md"],
+        )
+        assert len(items) == 2
+        assert items[0]["file_path"] == "install.ps1"
+        assert items[1]["file_path"] == "docs/quickstart-from-fork.md"
+
+    def test_parse_legacy_markdown_uses_single_target_file_fallback(self):
+        markdown = """
+## Auto-fixable
+### local validation guidance is too weak
+- severity: warning
+- 何が起きるか: fresh fork users cannot tell what local validation to run first
+"""
+        items = bridge_mod.parse_review_output(
+            markdown,
+            auto_fix_status="pending",
+            target_files=["README.md"],
+        )
+        assert len(items) == 1
+        assert items[0]["file_path"] == "README.md"
+
     def test_main_prints_payload_json(self, capsys):
         markdown = """
 ## Auto-fixable
