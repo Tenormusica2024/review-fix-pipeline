@@ -11,6 +11,29 @@
 
 ---
 
+## 最短入口
+
+bridge の種類を毎回覚えたくない場合は `pdca_bridge_runner.py` を使う。
+
+例:
+
+```bash
+python scripts/pdca_bridge_runner.py \
+  --kind output \
+  --input-file /tmp/review-output.md \
+  --reviewer sc-ifr \
+  --runtime codex \
+  --mode review-only \
+  --repo-root C:/path/to/actual-target-repo \
+  --forward-to-pdca
+```
+
+安全策:
+- `--forward-to-pdca` 時は **`--repo-root` 明示が必須**
+- 例外的に `review-fix-pipeline` 自身を対象にする場合だけ `--allow-bridge-repo-root` を使う
+
+---
+
 ## どの bridge を使うか
 
 ### 1. `/rfl` 完了後で `review-feedback.py record --findings '[...]'` の JSON がある
