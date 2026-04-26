@@ -112,7 +112,7 @@ To guarantee `/go-robust` runs before review output is returned to the user, ins
 
 - `enforce-go-robust-submit.py` — UserPromptSubmit. Tracks when `/ifr`, `/rfl`, or `/go-robust` is invoked and records the session state in `~/.claude/state/go-robust-enforce/<session_id>.json`.
 - `enforce-go-robust-stop.py` — Stop. When the assistant's last message contains `requires_confirmation` markers (any of: `## 要確認` + severity + `auto_fixable: false`, the `─────` separator, or list-form severity lines like `- [warning] ...` / `1. [critical] ...` produced by `/rfl` aggregation) and `/go-robust` has not yet run for the current review cycle, returns `decision: "block"` with a reason so the runtime forces `/go-robust` to execute.
-- `review_outcome_contract.py` — shared review outcome payload builder. Normalizes reviewer aliases, item fields, repo-relative paths, and can forward the payload to `claude-review-pdca`'s producer.
+- `review_outcome_contract.py` — shared review outcome payload builder. Normalizes reviewer aliases, item fields, repo-relative paths, and can forward the payload to `claude-review-pdca`'s producer. Use `--forward-to-pdca` for sibling-repo auto-discovery, or override with `--producer-path`, `--pdca-root`, `PDCA_PRODUCER_PATH`, or `CLAUDE_REVIEW_PDCA_ROOT`.
 
 Escape hatches (for the rare case you explicitly want to skip):
 

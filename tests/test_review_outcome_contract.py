@@ -71,6 +71,20 @@ class TestReviewOutcomeContract:
         assert payload["items"][0]["file_path"] == "src/app.py"
         assert payload["verification"]["commands"] == ["pytest -q"]
 
+    def test_resolve_producer_path_prefers_env_or_root_hint(self, monkeypatch, tmp_path):
+        env_script = tmp_path / "env" / "scripts" / "record-review-outcome.py"
+        env_script.parent.mkdir(parents=True)
+        env_script.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        monkeypatch.setenv("PDCA_PRODUCER_PATH", str(env_script))
+        assert contract_mod.resolve_producer_path() == str(env_script)
+
+        monkeypatch.delenv("PDCA_PRODUCER_PATH")
+        pdca_root = tmp_path / "pdca"
+        hinted = pdca_root / "scripts" / "record-review-outcome.py"
+        hinted.parent.mkdir(parents=True)
+        hinted.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+        assert contract_mod.resolve_producer_path(pdca_root=str(pdca_root)) == str(hinted)
+
     def test_main_prints_payload_json(self, capsys):
         items = [
             {
@@ -135,3 +149,36 @@ class TestReviewOutcomeContract:
         assert '{"ok":true}' in captured.out
         forwarded_payload = mock_forward.call_args.args[1]
         assert forwarded_payload["reviewer"] == "intent-first-review"
+
+    def test_main_auto_resolves_pdca_producer_and_passes_classify_flag(self, capsys, monkeypatch):
+        ok = subprocess.CompletedProcess(args=["python"], returncode=0, stdout='{"ok":true}', stderr="")
+        items = [
+            {
+                "type": "finding",
+                "summary": "pending issue",
+                "severity": "warning",
+                "file_path": "src/app.py",
+                "status": "pending",
+                "confidence": "high",
+            }
+        ]
+        with patch.object(contract_mod, "forward_to_producer", return_value=ok) as mock_forward:
+            with patch.object(contract_mod, "resolve_producer_path", return_value="C:/pdca/scripts/record-review-outcome.py"):
+                with patch(
+                    "sys.argv",
+                    [
+                        "review_outcome_contract.py",
+                        "--items-json",
+                        json.dumps(items, ensure_ascii=False),
+                        "--reviewer",
+                        "sc-rfl",
+                        "--forward-to-pdca",
+                        "--classify-patterns",
+                    ],
+                ):
+                    rc = contract_mod.main()
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert '{"ok":true}' in captured.out
+        assert mock_forward.call_args.args[0] == "C:/pdca/scripts/record-review-outcome.py"
+        assert mock_forward.call_args.kwargs["classify_patterns"] is True

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +35,8 @@ ALLOWED_SEVERITIES = {"critical", "high", "warning", "info", "nitpick"}
 ALLOWED_STATUSES = {"pending", "fixed", "judgment-required"}
 ALLOWED_TYPES = {"finding", "judgment_call"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_PDCA_PRODUCER = PROJECT_ROOT.parent / "claude-review-pdca" / "scripts" / "record-review-outcome.py"
 
 
 def normalize_reviewer(value: str | None) -> str:
@@ -161,16 +164,50 @@ def build_payload(
     return payload
 
 
-def forward_to_producer(producer_path: str, payload: dict, cwd: str = ".") -> subprocess.CompletedProcess[str]:
+def resolve_producer_path(
+    producer_path: str | None = None,
+    *,
+    pdca_root: str | None = None,
+) -> str | None:
+    explicit = str(producer_path or "").strip()
+    if explicit:
+        return explicit
+
+    env_producer = str(os.environ.get("PDCA_PRODUCER_PATH") or "").strip()
+    if env_producer:
+        return env_producer
+
+    root_hint = str(pdca_root or "").strip() or str(os.environ.get("CLAUDE_REVIEW_PDCA_ROOT") or "").strip()
+    if root_hint:
+        candidate = Path(root_hint) / "scripts" / "record-review-outcome.py"
+        if candidate.exists():
+            return str(candidate)
+
+    if DEFAULT_PDCA_PRODUCER.exists():
+        return str(DEFAULT_PDCA_PRODUCER)
+
+    return None
+
+
+def forward_to_producer(
+    producer_path: str,
+    payload: dict,
+    *,
+    cwd: str = ".",
+    classify_patterns: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    cmd = [
+        sys.executable,
+        producer_path,
+        "--payload-json",
+        json.dumps(payload, ensure_ascii=False),
+        "--cwd",
+        cwd,
+    ]
+    if classify_patterns:
+        cmd.append("--classify-patterns")
     return subprocess.run(
-        [
-            sys.executable,
-            producer_path,
-            "--payload-json",
-            json.dumps(payload, ensure_ascii=False),
-            "--cwd",
-            cwd,
-        ],
+        cmd,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -194,6 +231,9 @@ def main() -> int:
     parser.add_argument("--verification-command", action="append", default=[], help="verification command")
     parser.add_argument("--verification-summary", default="", help="verification summary")
     parser.add_argument("--producer-path", help="optional path to downstream PDCA producer")
+    parser.add_argument("--pdca-root", help="path to claude-review-pdca repo root")
+    parser.add_argument("--forward-to-pdca", action="store_true", help="resolve and call downstream PDCA producer automatically")
+    parser.add_argument("--classify-patterns", action="store_true", help="pass --classify-patterns to downstream PDCA producer")
     args = parser.parse_args()
 
     try:
@@ -215,8 +255,24 @@ def main() -> int:
         verification_summary=args.verification_summary,
     )
 
-    if args.producer_path:
-        result = forward_to_producer(args.producer_path, payload, cwd=args.cwd)
+    producer_path = None
+    if args.producer_path or args.forward_to_pdca:
+        producer_path = resolve_producer_path(args.producer_path, pdca_root=args.pdca_root)
+        if not producer_path:
+            print(
+                "Error: downstream PDCA producer が見つかりません。"
+                " --producer-path / --pdca-root / PDCA_PRODUCER_PATH / CLAUDE_REVIEW_PDCA_ROOT を確認してください。",
+                file=sys.stderr,
+            )
+            return 1
+
+    if producer_path:
+        result = forward_to_producer(
+            producer_path,
+            payload,
+            cwd=args.cwd,
+            classify_patterns=args.classify_patterns,
+        )
         if result.stderr:
             print(result.stderr, file=sys.stderr, end="")
         if result.stdout:
