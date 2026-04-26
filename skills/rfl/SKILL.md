@@ -538,6 +538,15 @@ python "$HOME/.claude/scripts/review-feedback.py" record \
   --findings '[{"summary":"...","severity":"critical|warning|info","category":"...","file_path":"...","score":N}]'
 # score: 1-5の深刻度スコア（1=軽微, 3=中程度, 5=致命的）。severityをより細粒度で表現する
 
+# PDCA bridge を併用する場合（推奨。上の findings JSON を再利用）
+python scripts/review_feedback_bridge.py \
+  --findings-json '[{"summary":"...","severity":"warning","category":"...","file_path":"..."}]' \
+  --reviewer "review-fix-loop" \
+  --runtime claude-code \
+  --forward-to-pdca \
+  --classify-patterns \
+  --status fixed
+
 # findings が 0件 かつ pending_confirmations も空で完了した場合（排他: 上記と同時に実行しない）
 # 記録する finding がないため close-session を直接呼ぶ
 python "$HOME/.claude/scripts/review-feedback.py" close-session \
@@ -595,6 +604,37 @@ Review Feedbackセッション終了:
 python "$HOME/.claude/scripts/review-feedback.py" close-session \
   --reviewer "review-fix-loop" --reason "limit-reached"
 ```
+
+### PDCA outcome bridge（完了時の任意連携）
+
+優先順位:
+1. **structured findings が手元にある**  
+   → `scripts/review_feedback_bridge.py` を使う
+2. structured findings がもう残っておらず、review markdown だけがある  
+   → `scripts/review_output_bridge.py` を使う
+
+推奨:
+- loop 完了後に生成した最終レビュー markdown を `"$SESSION_TMPDIR"/final-review.md`
+  のようなファイルに保存
+- safe fix を実施済みの `/rfl` 完了時は `--auto-fix-status fixed` を付ける
+
+例:
+```bash
+python scripts/review_output_bridge.py \
+  --input-file "$SESSION_TMPDIR"/final-review.md \
+  --reviewer review-fix-loop \
+  --runtime claude-code \
+  --forward-to-pdca \
+  --classify-patterns \
+  --auto-fix-status fixed
+```
+
+補足:
+- machine-readable block が markdown に含まれていれば、それを優先して読む
+- machine block がない場合でも、現行の `## 自動修正可` / `## 要確認`
+  markdown は bridge が parse できる shape を保つ
+- sibling repo 構成なら `--forward-to-pdca` のみで downstream producer を
+  自動解決できる
 
 ```
 ## ループ上限到達（5回）
