@@ -98,6 +98,45 @@ python scripts/review_outcome_contract.py \
   --forward-to-pdca
 ```
 
+#### `go-robust-items.json` テンプレ
+
+```json
+[
+  {
+    "type": "finding",
+    "title": "replace silent exception swallow with detectable failure",
+    "summary": "except Exception: pass hides failure and makes review findings recur",
+    "severity": "warning",
+    "category": "robustness",
+    "file_path": "src/worker.py",
+    "line": 87,
+    "status": "fixed",
+    "auto_fixable": true,
+    "needs_judgment": false,
+    "confidence": "high"
+  },
+  {
+    "type": "judgment_call",
+    "title": "retry budget policy still undecided",
+    "summary": "safe default is unclear because business latency vs durability tradeoff remains",
+    "severity": "warning",
+    "category": "api-contract",
+    "file_path": "src/worker.py",
+    "line": 121,
+    "status": "judgment-required",
+    "auto_fixable": false,
+    "needs_judgment": true,
+    "confidence": "medium"
+  }
+]
+```
+
+運用ルール:
+- `status: "fixed"` の item だけが pattern 学習候補
+- `status: "judgment-required"` は unresolved として扱い、pattern 学習しない
+- `sc-gr` は「review で見つかった pending を policy で解消した結果」を表すので、
+  summary は **何をどう安全側に倒したか** が分かる書き方にすると再利用しやすい
+
 ---
 
 ## 自動解決の優先順位
