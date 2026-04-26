@@ -275,3 +275,35 @@ PDCA の大枠は動いているため、次の 3 回は **「正しく流れた
   - duplicate
   - noise
 - 次回修正候補: 1 行
+
+---
+
+## 実運用で確認できた挙動（gittrend-jp）
+
+最初の live-run では `gittrend-jp` を対象に以下を確認できた。
+
+### 1. `/ifr review-only` → feedback reinjection
+
+- pending finding は `review-feedback.db` に入る
+- 次回 `prepare-implementation-context.py` 実行時に **file-specific finding** として再注入される
+- `repo_root` と `file_path` も期待どおり記録される
+
+### 2. `sc-rfl` / fixed items → learned pattern
+
+- fixed item は `review-patterns.db` に入る
+- ただし learned pattern 注入は **cool-off (`detection_count >= 2`)** を満たしてから
+- 1回目の fix 直後は pattern があっても、次回実装時には **feedback だけが見える** 状態でよい
+
+### 3. learned pattern は file-specific
+
+- cool-off を超えた learned pattern は、**対象ファイルに対してだけ** 注入される
+- たとえば `README.md` の pattern は `README.md` 編集時に出るが、
+  `.github/workflows/ci.yml` を編集するときはそのファイルの pattern だけが出る
+
+### 4. category は早めに補正したほうがよい
+
+- 実運用では `ci` / `onboarding` のような reviewer 側カテゴリがそのまま入ることがある
+- pattern 側 taxonomy では
+  - `ci` → `test-quality`
+  - `onboarding` → `documentation`
+  のような alias 補正を入れておくと、`maintainability` 偏重を防ぎやすい
