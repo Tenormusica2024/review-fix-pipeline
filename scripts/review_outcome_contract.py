@@ -70,6 +70,24 @@ def detect_repo_root(cwd: str = ".") -> str | None:
     return None
 
 
+def warn_if_repo_root_points_to_bridge_repo(
+    repo_root: str | None,
+    *,
+    forward_to_pdca: bool = False,
+    explicit_repo_root: bool = False,
+) -> None:
+    """PDCA forward時に review-fix-pipeline 自身を target repo と誤認していそうなら警告する。"""
+    if not forward_to_pdca or explicit_repo_root or not repo_root:
+        return
+    normalized_project_root = normalize_path(str(PROJECT_ROOT))
+    if normalize_path(repo_root) == normalized_project_root:
+        print(
+            "Warning: repo_root が review-fix-pipeline 自身を指しています。"
+            " 対象が別repoなら --repo-root か --cwd を明示してください。",
+            file=sys.stderr,
+        )
+
+
 def load_items_from_args(args: argparse.Namespace) -> list[dict]:
     if args.items_json:
         try:
@@ -246,6 +264,11 @@ def main() -> int:
         return 1
 
     repo_root = normalize_path(args.repo_root) or detect_repo_root(args.cwd)
+    warn_if_repo_root_points_to_bridge_repo(
+        repo_root,
+        forward_to_pdca=bool(args.producer_path or args.forward_to_pdca),
+        explicit_repo_root=bool(args.repo_root),
+    )
     payload = build_payload(
         reviewer=args.reviewer,
         items=items,

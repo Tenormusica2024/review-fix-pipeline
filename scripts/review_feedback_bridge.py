@@ -22,6 +22,7 @@ from review_outcome_contract import (  # type: ignore
     forward_to_producer,
     normalize_path,
     resolve_producer_path,
+    warn_if_repo_root_points_to_bridge_repo,
 )
 
 
@@ -123,6 +124,11 @@ def main() -> int:
         return 1
 
     repo_root = normalize_path(args.repo_root) or detect_repo_root(args.cwd)
+    warn_if_repo_root_points_to_bridge_repo(
+        repo_root,
+        forward_to_pdca=bool(args.producer_path or args.forward_to_pdca),
+        explicit_repo_root=bool(args.repo_root),
+    )
     items = build_items(
         findings,
         status=args.status,

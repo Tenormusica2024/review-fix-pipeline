@@ -50,6 +50,21 @@ auto_fixable: false
         assert items[1]["status"] == "judgment-required"
         assert items[1]["needs_judgment"] is True
 
+    def test_parse_legacy_judgment_block_captures_target_when_present(self):
+        markdown = """
+## 要確認
+severity: warning
+問題: retry budget policy
+詳細: latency と durability の tradeoff
+対象: src/worker.py:121
+判断ポイント: 3回 retry にするか 5回にするか
+─────────────────────────────
+"""
+        items = bridge_mod.parse_review_output(markdown)
+        assert len(items) == 1
+        assert items[0]["file_path"] == "src/worker.py"
+        assert items[0]["line"] == 121
+
     def test_parse_machine_block_takes_precedence(self):
         markdown = """
 ## 自動修正可
@@ -123,3 +138,29 @@ auto_fixable: false
         assert rc == 0
         assert '{"ok":true}' in captured.out
         assert mock_forward.call_args.kwargs["classify_patterns"] is True
+
+    def test_main_warns_when_repo_root_looks_like_bridge_repo(self, capsys):
+        markdown = """
+## 自動修正可
+### quoted shell invocation
+- severity: warning
+- 何が起きるか: shell quoted subprocess is fragile
+"""
+        with patch.object(bridge_mod, "forward_to_producer", return_value=subprocess.CompletedProcess(args=["python"], returncode=0, stdout='{"ok":true}', stderr="")):
+            with patch.object(bridge_mod, "resolve_producer_path", return_value="C:/pdca/scripts/record-review-outcome.py"):
+                with patch.object(bridge_mod, "detect_repo_root", return_value=bridge_mod.normalize_path(str(bridge_mod.Path(__file__).resolve().parent.parent))):
+                    with patch(
+                        "sys.argv",
+                        [
+                            "review_output_bridge.py",
+                            "--input-text",
+                            markdown,
+                            "--reviewer",
+                            "sc-ifr",
+                            "--forward-to-pdca",
+                        ],
+                    ):
+                        rc = bridge_mod.main()
+        captured = capsys.readouterr()
+        assert rc == 0
+        assert "review-fix-pipeline 自身を指しています" in captured.err

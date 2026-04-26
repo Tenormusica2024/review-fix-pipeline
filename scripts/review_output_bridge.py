@@ -23,6 +23,7 @@ from review_outcome_contract import (  # type: ignore
     forward_to_producer,
     normalize_path,
     resolve_producer_path,
+    warn_if_repo_root_points_to_bridge_repo,
 )
 
 FENCE_RE = re.compile(
@@ -115,6 +116,7 @@ def _parse_judgment_block(block: str) -> list[dict]:
         fields = {m.group("key"): m.group("value").strip() for m in FIELD_RE.finditer(chunk)}
         title = fields.get("問題") or fields.get("Issue") or "judgment required"
         summary = fields.get("詳細") or fields.get("Detail") or title
+        file_path, line = _split_path_line(fields.get("対象") or fields.get("Target"))
         items.append(
             {
                 "type": "judgment_call" if fields.get("判断ポイント") or fields.get("Decision point") else "finding",
@@ -122,8 +124,8 @@ def _parse_judgment_block(block: str) -> list[dict]:
                 "summary": summary,
                 "severity": _normalize_severity(fields.get("severity")),
                 "category": "",
-                "file_path": None,
-                "line": None,
+                "file_path": file_path,
+                "line": line,
                 "status": "judgment-required",
                 "auto_fixable": False,
                 "needs_judgment": True,
@@ -189,6 +191,11 @@ def main() -> int:
         return 1
 
     repo_root = normalize_path(args.repo_root) or detect_repo_root(args.cwd)
+    warn_if_repo_root_points_to_bridge_repo(
+        repo_root,
+        forward_to_pdca=bool(args.producer_path or args.forward_to_pdca),
+        explicit_repo_root=bool(args.repo_root),
+    )
     payload = build_payload(
         reviewer=args.reviewer,
         items=items,
