@@ -82,6 +82,29 @@ severity: warning
         assert len(items) == 1
         assert items[0]["summary"] == "from machine"
 
+    def test_parse_legacy_markdown_accepts_capitalized_english_keys(self):
+        markdown = """
+## Auto-fixable
+### fragile command quoting
+- Severity: warning
+- What happens: quoting breaks on special chars
+- Target: scripts/run.py:9
+
+## Requires confirmation
+- Severity: warning
+- Issue: retry budget policy
+- Detail: latency と durability の tradeoff
+- Target: src/worker.py:121
+- Decision point: 3回 retry にするか 5回にするか
+"""
+        items = bridge_mod.parse_review_output(markdown, auto_fix_status="pending")
+        assert len(items) == 2
+        assert items[0]["severity"] == "warning"
+        assert items[0]["file_path"] == "scripts/run.py"
+        assert items[1]["severity"] == "warning"
+        assert items[1]["file_path"] == "src/worker.py"
+        assert items[1]["line"] == 121
+
     def test_main_prints_payload_json(self, capsys):
         markdown = """
 ## Auto-fixable

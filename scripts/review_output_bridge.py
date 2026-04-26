@@ -35,8 +35,21 @@ SECTION_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 TITLE_RE = re.compile(r"^###\s*(?P<title>.+?)\s*$", re.MULTILINE)
-FIELD_RE = re.compile(r"^\s*(?:-\s*)?(?P<key>severity|auto_fixable|問題|Issue|詳細|Detail|判断ポイント|Decision point|何が起きるか|What happens|対象|Target)\s*:\s*(?P<value>.+?)\s*$", re.MULTILINE)
+FIELD_RE = re.compile(
+    r"^\s*(?:-\s*)?(?P<key>severity|auto_fixable|問題|Issue|詳細|Detail|判断ポイント|Decision point|何が起きるか|What happens|対象|Target)\s*:\s*(?P<value>.+?)\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
 SEPARATOR_RE = re.compile(r"^\s*─{5,}\s*$", re.MULTILINE)
+
+CANONICAL_FIELD_KEYS = {
+    "severity": "severity",
+    "auto_fixable": "auto_fixable",
+    "issue": "Issue",
+    "detail": "Detail",
+    "decision point": "Decision point",
+    "what happens": "What happens",
+    "target": "Target",
+}
 
 
 def load_text(input_text: str | None, input_file: str | None) -> str:
@@ -65,6 +78,15 @@ def _split_path_line(value: str | None) -> tuple[str | None, int | None]:
     return normalize_path(raw), None
 
 
+def _collect_fields(block: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for match in FIELD_RE.finditer(block):
+        key = match.group("key").strip()
+        canonical = CANONICAL_FIELD_KEYS.get(key.lower(), key)
+        fields[canonical] = match.group("value").strip()
+    return fields
+
+
 def extract_machine_block(markdown: str) -> list[dict] | None:
     for match in FENCE_RE.finditer(markdown):
         body = match.group(1).strip()
@@ -88,7 +110,7 @@ def _parse_auto_fixable_block(block: str, default_status: str) -> list[dict]:
         start = title_match.end()
         end = titles[index + 1].start() if index + 1 < len(titles) else len(block)
         body = block[start:end]
-        fields = {m.group("key"): m.group("value").strip() for m in FIELD_RE.finditer(body)}
+        fields = _collect_fields(body)
         file_path, line = _split_path_line(fields.get("対象") or fields.get("Target"))
         summary = fields.get("何が起きるか") or fields.get("What happens") or title_match.group("title").strip()
         items.append(
@@ -113,7 +135,7 @@ def _parse_judgment_block(block: str) -> list[dict]:
     items: list[dict] = []
     chunks = [chunk.strip() for chunk in SEPARATOR_RE.split(block) if chunk.strip()]
     for chunk in chunks:
-        fields = {m.group("key"): m.group("value").strip() for m in FIELD_RE.finditer(chunk)}
+        fields = _collect_fields(chunk)
         title = fields.get("問題") or fields.get("Issue") or "judgment required"
         summary = fields.get("詳細") or fields.get("Detail") or title
         file_path, line = _split_path_line(fields.get("対象") or fields.get("Target"))
