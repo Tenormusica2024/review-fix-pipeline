@@ -98,6 +98,7 @@ def _infer_file_path(
 ) -> tuple[str | None, int | None]:
     normalized_targets = [normalize_path(path) for path in (target_files or []) if normalize_path(path)]
     joined = "\n".join(str(text or "") for text in texts if text)
+    joined_lower = joined.lower()
 
     for match in PATH_HINT_RE.finditer(joined):
         candidate_raw = match.group("path").rstrip(".,)")
@@ -118,6 +119,22 @@ def _infer_file_path(
                     return target, candidate_line
         else:
             return candidate_path, candidate_line
+
+    if normalized_targets:
+        for target in normalized_targets:
+            target_path = Path(target)
+            hints = {
+                target_path.name.lower(),
+                target_path.stem.lower(),
+            }
+            hints.update(
+                token.lower()
+                for token in re.split(r"[-_.\\/]+", target)
+                if len(token) >= 4
+            )
+            for hint in sorted(hints, key=len, reverse=True):
+                if hint and hint in joined_lower:
+                    return target, None
 
     if len(normalized_targets) == 1:
         return normalized_targets[0], None

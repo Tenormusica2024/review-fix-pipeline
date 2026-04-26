@@ -141,6 +141,21 @@ severity: warning
         assert len(items) == 1
         assert items[0]["file_path"] == "README.md"
 
+    def test_parse_legacy_markdown_matches_target_hint_from_title(self):
+        markdown = """
+## Auto-fixable
+### quickstart dispatch guidance is still ambiguous
+- severity: warning
+- 何が起きるか: first-time users may not realize dispatch is incomplete without separate skills
+"""
+        items = bridge_mod.parse_review_output(
+            markdown,
+            auto_fix_status="pending",
+            target_files=["README.md", "docs/quickstart-from-fork.md"],
+        )
+        assert len(items) == 1
+        assert items[0]["file_path"] == "docs/quickstart-from-fork.md"
+
     def test_main_prints_payload_json(self, capsys):
         markdown = """
 ## Auto-fixable
