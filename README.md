@@ -4,13 +4,16 @@
 
 Claude Code skills for **intent-first code review** and **automated fix loops** with independent sub-agent contexts.
 
-**Best for teams using Claude Code** who want review and fix to happen in separate contexts instead of one shared session.
+**Built for Claude Code first, but now bridgeable to Codex/PDCA workflows** when you want review output, fix outcomes, and learned patterns to flow into a shared persistence layer.
+
+**Best for teams using Claude Code** who want review and fix to happen in separate contexts instead of one shared session — while still keeping downstream PDCA/bridge integration explicit and reusable.
 
 ## At a glance
 
 - `ifr`: infer intent first, then surface issues within that intent
 - `rfl`: apply safe fixes, then re-review with a fresh sub-agent
 - `go-robust`: resolve robustness-only judgment calls conservatively without bouncing trivial decisions back to the user
+- PDCA bridge helpers: forward markdown / findings / items into a shared review-memory pipeline
 
 ## Quick start
 
