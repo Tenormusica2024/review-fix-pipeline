@@ -307,3 +307,14 @@ PDCA の大枠は動いているため、次の 3 回は **「正しく流れた
   - `ci` → `test-quality`
   - `onboarding` → `documentation`
   のような alias 補正を入れておくと、`maintainability` 偏重を防ぎやすい
+
+### 5. `/ifr` markdown bridge は `--target-file` を渡した方がよい
+
+- legacy markdown だけだと `file_path` が落ちることがある
+- `review_output_bridge.py` は
+  - 本文中の path-like token
+  - `--target-file`
+  - title / summary 内の弱いヒント（`quickstart`, `install`, `readme` など）
+  を使って file を推定する
+- そのため、**Codex 側で `/ifr review-only` を流すときは `--target-file` をできるだけ明示**した方がよい
+- ただし mixed finding を 1 本の markdown に詰めると、近い file に寄って解釈されることはまだありうる
