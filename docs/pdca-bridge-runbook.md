@@ -318,3 +318,39 @@ PDCA の大枠は動いているため、次の 3 回は **「正しく流れた
   を使って file を推定する
 - そのため、**Codex 側で `/ifr review-only` を流すときは `--target-file` をできるだけ明示**した方がよい
 - ただし mixed finding を 1 本の markdown に詰めると、近い file に寄って解釈されることはまだありうる
+
+---
+
+## 実データ live-run 棚卸し（2026-04-26）
+
+この runbook 作成後、次の public repo でも `/ifr -> sc-rfl -> reinjection` を回して確認した。
+
+- `gittrend-jp`
+- `claude-code-hooks`
+- `x-bookmark-gallery`
+- `openclaw-claude-bridge`
+- `x-bookmark-knowledge-pack`
+
+### 共通して確認できたこと
+
+1. `/ifr review-only` の pending は `review-feedback.db` に入る
+2. `sc-rfl` の fixed item は `review-patterns.db` に入る
+3. `prepare-implementation-context.py` で file-specific reinjection が出る
+4. `repo_root` は cross-repo 実行でも概ね正しく記録できる
+
+### 追加で分かったこと
+
+- `gittrend-jp` では learned pattern の cool-off 後再注入まで確認できた
+- `claude-code-hooks` では legacy markdown の `file_path` 推定が弱いことが分かり、
+  `review_output_bridge.py` に path-like token / `--target-file` / title-summary hint 推定を追加して改善確認した
+- `openclaw-claude-bridge` では古い judgment 寄り pattern が見えたため、
+  judgment item 混入監視は今後も必要
+
+### 現時点の重点監視
+
+今後は「仕組みが動くか」より、次を監視する。
+
+- IFR markdown bridge の `file_path` 精度
+- judgment item の pattern 混入
+- pattern 重複
+- category alias の追加必要性
