@@ -354,3 +354,33 @@ PDCA の大枠は動いているため、次の 3 回は **「正しく流れた
 - judgment item の pattern 混入
 - pattern 重複
 - category alias の追加必要性
+
+---
+
+## TODO backlog（2026-04-26 時点）
+
+### 今やる（運用監視）
+
+- judgment contamination 監視
+  - pattern DB に要確認 / policy相談 / one-off判断が混ざっていないか確認
+- duplicate pattern 監視
+  - wording 違いで同義 pattern が増えていないか確認
+- IFR `file_path` 精度監視
+  - free-text review を multi-file で流した時の誤寄せを確認
+- category alias 監視
+  - `public-boundary`, `operator-scope`, `demo-validation`, `integration-validation` など新ラベルの出現確認
+
+### もう少し live-run を回してから着手
+
+- structured output / `review-outcome-json` への移行
+  - `file_path`, `status`, `confidence`, `category`, `target-file` を reviewer 側で明示する方向
+- repo_root guard 強化
+  - warning のみで足りないケースが出るなら fail-close 条件を検討
+- pattern dedupe 実装
+  - 同義 pattern が増え始めたら summary 正規化や key 強化を入れる
+
+### 後回し
+
+- fork-ready 完全化
+- bootstrap 本格化
+- sample workspace 整備
