@@ -198,6 +198,12 @@ Claude Code と Codex は runtime が違うが、review result の意味は同�
 3. その payload を `claude-review-pdca` の
    `record-review-outcome.py` に渡せるようにする
 
+暫定 bridge:
+- `scripts/review_output_bridge.py` を使うと、
+  既存の markdown 出力を壊さずに共通 payload 化できる
+- machine-readable block が埋め込まれている場合はそれを優先
+- ない場合は legacy markdown (`## 自動修正可` / `## 要確認`) を parse して payload 化する
+
 ---
 
 ## branch 方針
