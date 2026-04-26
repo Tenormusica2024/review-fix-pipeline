@@ -216,3 +216,62 @@ python scripts/review_output_bridge.py \
 - **対象 repo が `review-fix-pipeline` 自身でない場合は `--repo-root` か `--cwd` を必ず明示**する
 - machine-readable block が安定したら、markdown parser 依存を徐々に減らしてよい
 - false positive 学習は引き続き HITL を維持する
+
+---
+
+## 今後 3 回の実案件で見る項目
+
+PDCA の大枠は動いているため、次の 3 回は **「正しく流れたか」より「入ったデータが次回役に立つか」** を重点的に見る。
+
+### 1. routing が意図どおりか
+
+- `/ifr` → **feedback 主体** になっているか
+- `/rfl` → **fixed が pattern** に入っているか
+- `sc-gr` / `/go-robust` → **fixed のみ pattern** で、judgment-required は学習していないか
+
+### 2. repo_root が正しいか
+
+- cross-repo 実行時に対象 repo が正しく記録されているか
+- `review-fix-pipeline` 自身の root で誤記録されていないか
+
+### 3. file_path が取れているか
+
+- pending / fixed finding に `file_path` があるか
+- judgment item でも target が取れるなら取れているか
+
+### 4. pattern の重複
+
+- 同じ問題が wording 違いで複数 pattern 化していないか
+- summary の粒度が揃っているか
+
+### 5. category 偏り
+
+- `maintainability` に寄りすぎていないか
+- 本来 `robustness` / `api-contract` / `logic` に分けたいものが埋もれていないか
+
+### 6. ノイズ量
+
+- `review-feedback.db` に pending が増えすぎていないか
+- 再注入時に「少数の有効 finding」になっているか
+
+### 7. 次回再注入が効いたか
+
+- 次の実装時に context が適切に出たか
+- その finding / pattern が実際に修正判断に役立ったか
+
+---
+
+## 実案件ごとの簡易メモ
+
+各案件で最低限これだけ残す:
+
+- 対象: repo / file
+- review 種別: `/ifr` / `/rfl` / `sc-gr`
+- DB 結果: feedback 何件 / pattern 何件
+- 違和感:
+  - repo_root
+  - file_path
+  - category
+  - duplicate
+  - noise
+- 次回修正候補: 1 行
