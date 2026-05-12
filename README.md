@@ -1,5 +1,7 @@
 # review-fix-pipeline
 
+![Review Fix Pipeline: intent-first review, safe fixes, and fresh re-review](docs/assets/review-fix-pipeline-hero.png)
+
 > AI agents suffer from the same self-review bias as humans — they unconsciously avoid re-detecting their own mistakes. This pipeline reduces that bias structurally, by separating reviewer and fixer into independent contexts.
 
 Claude Code skills for **intent-first code review** and **automated fix loops** with independent sub-agent contexts.
