@@ -6,13 +6,13 @@ PDCA bridge 実行を 1 コマンドに寄せる wrapper。
 - markdown / findings / items のどれを持っていても同じ入口から流せる
 - cross-repo forward 時に --repo-root 明示を促し、repo scope 誤記録を減らす
 """
+
 from __future__ import annotations
 
 import argparse
 import subprocess
 import sys
 from pathlib import Path
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_MAP = {
@@ -87,7 +87,9 @@ def validate_args(args: argparse.Namespace) -> None:
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Unified PDCA bridge runner")
-    parser.add_argument("--kind", choices=sorted(SCRIPT_MAP), required=True, help="output/findings/items")
+    parser.add_argument(
+        "--kind", choices=sorted(SCRIPT_MAP), required=True, help="output/findings/items"
+    )
     parser.add_argument("--reviewer", required=True, help="reviewer / skill name")
     parser.add_argument("--session-id", help="session id")
     parser.add_argument("--repo-root", help="actual target repo root")
@@ -95,12 +97,18 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime", default="unknown", help="claude-code / codex / unknown")
     parser.add_argument("--mode", default="normal", help="normal / review-only")
     parser.add_argument("--target-file", action="append", default=[], help="target file")
-    parser.add_argument("--verification-command", action="append", default=[], help="verification command")
+    parser.add_argument(
+        "--verification-command", action="append", default=[], help="verification command"
+    )
     parser.add_argument("--verification-summary", default="", help="verification summary")
     parser.add_argument("--producer-path", help="optional explicit PDCA producer path")
     parser.add_argument("--pdca-root", help="path to claude-review-pdca root")
-    parser.add_argument("--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer")
-    parser.add_argument("--classify-patterns", action="store_true", help="pass --classify-patterns downstream")
+    parser.add_argument(
+        "--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer"
+    )
+    parser.add_argument(
+        "--classify-patterns", action="store_true", help="pass --classify-patterns downstream"
+    )
     parser.add_argument(
         "--allow-bridge-repo-root",
         action="store_true",
@@ -118,9 +126,23 @@ def make_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--findings-json", help="findings JSON array (kind=findings)")
     parser.add_argument("--findings-file", help="findings JSON file (kind=findings)")
-    parser.add_argument("--status", choices=["pending", "fixed", "judgment-required"], default="fixed", help="status for findings items (kind=findings)")
-    parser.add_argument("--confidence", choices=["low", "medium", "high"], default="high", help="confidence for findings items (kind=findings)")
-    parser.add_argument("--needs-judgment", action="store_true", help="mark all findings as judgment items (kind=findings)")
+    parser.add_argument(
+        "--status",
+        choices=["pending", "fixed", "judgment-required"],
+        default="fixed",
+        help="status for findings items (kind=findings)",
+    )
+    parser.add_argument(
+        "--confidence",
+        choices=["low", "medium", "high"],
+        default="high",
+        help="confidence for findings items (kind=findings)",
+    )
+    parser.add_argument(
+        "--needs-judgment",
+        action="store_true",
+        help="mark all findings as judgment items (kind=findings)",
+    )
 
     parser.add_argument("--items-json", help="items JSON array (kind=items)")
     parser.add_argument("--items-file", help="items JSON file (kind=items)")

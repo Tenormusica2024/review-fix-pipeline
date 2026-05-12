@@ -7,6 +7,7 @@ PDCA producer へ接続する bridge。
 - /rfl Step 5 の既存 `review-feedback.py record --findings ...` と同じ JSON を再利用
 - markdown parse を経由せずに PDCA へ保存する
 """
+
 from __future__ import annotations
 
 import argparse
@@ -95,7 +96,9 @@ def build_items(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bridge review-feedback findings JSON to shared outcome contract / PDCA producer")
+    parser = argparse.ArgumentParser(
+        description="Bridge review-feedback findings JSON to shared outcome contract / PDCA producer"
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--findings-json", help="findings JSON array")
     source.add_argument("--findings-file", help="findings JSON file")
@@ -106,15 +109,35 @@ def main() -> int:
     parser.add_argument("--runtime", default="unknown", help="claude-code / codex / unknown")
     parser.add_argument("--mode", default="normal", help="normal / review-only")
     parser.add_argument("--target-file", action="append", default=[], help="target file")
-    parser.add_argument("--verification-command", action="append", default=[], help="verification command")
+    parser.add_argument(
+        "--verification-command", action="append", default=[], help="verification command"
+    )
     parser.add_argument("--verification-summary", default="", help="verification summary")
     parser.add_argument("--producer-path", help="optional explicit PDCA producer path")
     parser.add_argument("--pdca-root", help="path to claude-review-pdca root")
-    parser.add_argument("--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer")
-    parser.add_argument("--classify-patterns", action="store_true", help="pass --classify-patterns to downstream PDCA producer")
-    parser.add_argument("--status", choices=["pending", "fixed", "judgment-required"], default="fixed", help="status assigned to findings")
-    parser.add_argument("--confidence", choices=["low", "medium", "high"], default="high", help="confidence assigned to findings")
-    parser.add_argument("--needs-judgment", action="store_true", help="mark all findings as judgment items")
+    parser.add_argument(
+        "--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer"
+    )
+    parser.add_argument(
+        "--classify-patterns",
+        action="store_true",
+        help="pass --classify-patterns to downstream PDCA producer",
+    )
+    parser.add_argument(
+        "--status",
+        choices=["pending", "fixed", "judgment-required"],
+        default="fixed",
+        help="status assigned to findings",
+    )
+    parser.add_argument(
+        "--confidence",
+        choices=["low", "medium", "high"],
+        default="high",
+        help="confidence assigned to findings",
+    )
+    parser.add_argument(
+        "--needs-judgment", action="store_true", help="mark all findings as judgment items"
+    )
     args = parser.parse_args()
 
     try:

@@ -7,6 +7,7 @@ review markdown / machine block を共通 contract payload に変換し、
 - 既存 /ifr /rfl の markdown 出力を壊さず後段 PDCA に接続する
 - 将来的に machine-readable block が埋め込まれたら優先利用する
 """
+
 from __future__ import annotations
 
 import argparse
@@ -96,7 +97,9 @@ def _infer_file_path(
     *texts: str | None,
     target_files: list[str] | None = None,
 ) -> tuple[str | None, int | None]:
-    normalized_targets = [normalize_path(path) for path in (target_files or []) if normalize_path(path)]
+    normalized_targets = [
+        normalize_path(path) for path in (target_files or []) if normalize_path(path)
+    ]
     joined = "\n".join(str(text or "") for text in texts if text)
     joined_lower = joined.lower()
 
@@ -128,9 +131,7 @@ def _infer_file_path(
                 target_path.stem.lower(),
             }
             hints.update(
-                token.lower()
-                for token in re.split(r"[-_.\\/]+", target)
-                if len(token) >= 4
+                token.lower() for token in re.split(r"[-_.\\/]+", target) if len(token) >= 4
             )
             for hint in sorted(hints, key=len, reverse=True):
                 if hint and hint in joined_lower:
@@ -157,7 +158,9 @@ def extract_machine_block(markdown: str) -> list[dict] | None:
     return None
 
 
-def _parse_auto_fixable_block(block: str, default_status: str, *, target_files: list[str] | None = None) -> list[dict]:
+def _parse_auto_fixable_block(
+    block: str, default_status: str, *, target_files: list[str] | None = None
+) -> list[dict]:
     items: list[dict] = []
     titles = list(TITLE_RE.finditer(block))
     for index, title_match in enumerate(titles):
@@ -174,7 +177,11 @@ def _parse_auto_fixable_block(block: str, default_status: str, *, target_files: 
                 body,
                 target_files=target_files,
             )
-        summary = fields.get("何が起きるか") or fields.get("What happens") or title_match.group("title").strip()
+        summary = (
+            fields.get("何が起きるか")
+            or fields.get("What happens")
+            or title_match.group("title").strip()
+        )
         items.append(
             {
                 "type": "finding",
@@ -212,7 +219,9 @@ def _parse_judgment_block(block: str, *, target_files: list[str] | None = None) 
             )
         items.append(
             {
-                "type": "judgment_call" if fields.get("判断ポイント") or fields.get("Decision point") else "finding",
+                "type": "judgment_call"
+                if fields.get("判断ポイント") or fields.get("Decision point")
+                else "finding",
                 "title": title,
                 "summary": summary,
                 "severity": _normalize_severity(fields.get("severity")),
@@ -228,7 +237,9 @@ def _parse_judgment_block(block: str, *, target_files: list[str] | None = None) 
     return items
 
 
-def parse_legacy_markdown(markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None) -> list[dict]:
+def parse_legacy_markdown(
+    markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None
+) -> list[dict]:
     items: list[dict] = []
     sections = list(SECTION_RE.finditer(markdown))
     for index, section_match in enumerate(sections):
@@ -237,21 +248,29 @@ def parse_legacy_markdown(markdown: str, *, auto_fix_status: str = "pending", ta
         end = sections[index + 1].start() if index + 1 < len(sections) else len(markdown)
         body = markdown[start:end]
         if section_name in {"自動修正可", "auto-fixable"}:
-            items.extend(_parse_auto_fixable_block(body, auto_fix_status, target_files=target_files))
+            items.extend(
+                _parse_auto_fixable_block(body, auto_fix_status, target_files=target_files)
+            )
         elif section_name in {"要確認", "requires confirmation"}:
             items.extend(_parse_judgment_block(body, target_files=target_files))
     return items
 
 
-def parse_review_output(markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None) -> list[dict]:
+def parse_review_output(
+    markdown: str, *, auto_fix_status: str = "pending", target_files: list[str] | None = None
+) -> list[dict]:
     machine_items = extract_machine_block(markdown)
     if machine_items is not None:
         return machine_items
-    return parse_legacy_markdown(markdown, auto_fix_status=auto_fix_status, target_files=target_files)
+    return parse_legacy_markdown(
+        markdown, auto_fix_status=auto_fix_status, target_files=target_files
+    )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Bridge review markdown output to shared outcome contract / PDCA producer")
+    parser = argparse.ArgumentParser(
+        description="Bridge review markdown output to shared outcome contract / PDCA producer"
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--input-text", help="review markdown text")
     source.add_argument("--input-file", help="review markdown file")
@@ -262,12 +281,20 @@ def main() -> int:
     parser.add_argument("--runtime", default="unknown", help="claude-code / codex / unknown")
     parser.add_argument("--mode", default="normal", help="normal / review-only")
     parser.add_argument("--target-file", action="append", default=[], help="target file")
-    parser.add_argument("--verification-command", action="append", default=[], help="verification command")
+    parser.add_argument(
+        "--verification-command", action="append", default=[], help="verification command"
+    )
     parser.add_argument("--verification-summary", default="", help="verification summary")
     parser.add_argument("--producer-path", help="optional explicit PDCA producer path")
     parser.add_argument("--pdca-root", help="path to claude-review-pdca root")
-    parser.add_argument("--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer")
-    parser.add_argument("--classify-patterns", action="store_true", help="pass --classify-patterns to downstream PDCA producer")
+    parser.add_argument(
+        "--forward-to-pdca", action="store_true", help="forward to downstream PDCA producer"
+    )
+    parser.add_argument(
+        "--classify-patterns",
+        action="store_true",
+        help="pass --classify-patterns to downstream PDCA producer",
+    )
     parser.add_argument(
         "--auto-fix-status",
         choices=["pending", "fixed"],
@@ -278,7 +305,9 @@ def main() -> int:
 
     try:
         markdown = load_text(args.input_text, args.input_file)
-        items = parse_review_output(markdown, auto_fix_status=args.auto_fix_status, target_files=args.target_file)
+        items = parse_review_output(
+            markdown, auto_fix_status=args.auto_fix_status, target_files=args.target_file
+        )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

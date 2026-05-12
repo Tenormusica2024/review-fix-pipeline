@@ -7,6 +7,7 @@ review-fix-pipeline 側の共通 review outcome contract builder。
 2. Claude Code / Codex どちらの runtime でも共通 payload を生成する
 3. 必要なら外部 producer（例: claude-review-pdca の record-review-outcome.py）へ渡す
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,7 +16,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
 
 REVIEWER_ALIASES = {
     "/ifr": "intent-first-review",
@@ -39,7 +39,9 @@ ALLOWED_STATUSES = {"pending", "fixed", "judgment-required"}
 ALLOWED_TYPES = {"finding", "judgment_call"}
 ALLOWED_CONFIDENCE = {"low", "medium", "high"}
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_PDCA_PRODUCER = PROJECT_ROOT.parent / "claude-review-pdca" / "scripts" / "record-review-outcome.py"
+DEFAULT_PDCA_PRODUCER = (
+    PROJECT_ROOT.parent / "claude-review-pdca" / "scripts" / "record-review-outcome.py"
+)
 
 
 def normalize_reviewer(value: str | None) -> str:
@@ -198,7 +200,9 @@ def resolve_producer_path(
     if env_producer:
         return env_producer
 
-    root_hint = str(pdca_root or "").strip() or str(os.environ.get("CLAUDE_REVIEW_PDCA_ROOT") or "").strip()
+    root_hint = (
+        str(pdca_root or "").strip() or str(os.environ.get("CLAUDE_REVIEW_PDCA_ROOT") or "").strip()
+    )
     if root_hint:
         candidate = Path(root_hint) / "scripts" / "record-review-outcome.py"
         if candidate.exists():
@@ -248,13 +252,25 @@ def main() -> int:
     parser.add_argument("--cwd", default=".", help="repo root detection fallback cwd")
     parser.add_argument("--runtime", default="unknown", help="claude-code / codex / unknown")
     parser.add_argument("--mode", default="normal", help="normal / review-only")
-    parser.add_argument("--target-file", action="append", default=[], help="target file (repeatable)")
-    parser.add_argument("--verification-command", action="append", default=[], help="verification command")
+    parser.add_argument(
+        "--target-file", action="append", default=[], help="target file (repeatable)"
+    )
+    parser.add_argument(
+        "--verification-command", action="append", default=[], help="verification command"
+    )
     parser.add_argument("--verification-summary", default="", help="verification summary")
     parser.add_argument("--producer-path", help="optional path to downstream PDCA producer")
     parser.add_argument("--pdca-root", help="path to claude-review-pdca repo root")
-    parser.add_argument("--forward-to-pdca", action="store_true", help="resolve and call downstream PDCA producer automatically")
-    parser.add_argument("--classify-patterns", action="store_true", help="pass --classify-patterns to downstream PDCA producer")
+    parser.add_argument(
+        "--forward-to-pdca",
+        action="store_true",
+        help="resolve and call downstream PDCA producer automatically",
+    )
+    parser.add_argument(
+        "--classify-patterns",
+        action="store_true",
+        help="pass --classify-patterns to downstream PDCA producer",
+    )
     args = parser.parse_args()
 
     try:
