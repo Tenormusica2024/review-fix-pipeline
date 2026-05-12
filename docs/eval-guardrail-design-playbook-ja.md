@@ -5,6 +5,8 @@
 
 対象読者は、Claude Code / Codex / AI coding agent を業務導入する企業、または面接で AI エージェント運用設計を評価する人を想定する。
 
+工程ごとに「何を、どうやって、どの水準で制御しているか」をクライアント / 面接官向けに説明する場合は、先に `docs/eval-guardrail-process-explanation-ja.md` を使う。
+
 ---
 
 ## 1. 一言で言うと
